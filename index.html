@@ -925,7 +925,7 @@ $('#reload').addEventListener('click', () => loadLive(true));
 document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - lastLoad > 15000) loadLive(); });
 window.addEventListener('online', () => loadLive(true));
 
-// ---------- export: Excel (.xlsx made in the browser) and PDF (print dialog -> Save as PDF)
+// ---------- export: Excel (.xlsx made in the browser) and PDF (langsung unduh; cadangan: dialog cetak)
 const SHORT = { 'GR Flamboyan': 'Flamboyan', 'GR Adam Malik': 'Adam Malik', 'Body Repair': 'Body Repair', 'Otoxpert': 'Otoxpert', 'GR Gagak Hitam': 'Gagak Hitam' };
 const REK2 = [['u', 'Uraian'], ['v', 'Jumlah (Rp)', 'num']];
 function reportOf(cab) {
@@ -1030,7 +1030,62 @@ async function buildXlsx(reps, all) {
 const stamp = () => { const d = new Date(); return d.getFullYear() + two(d.getMonth() + 1) + two(d.getDate()) + '-' + two(d.getHours()) + two(d.getMinutes()); };
 function download(blob, name) { const a = el('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
 
-// --- PDF through the browser print dialog
+// --- PDF langsung terunduh (jsPDF + autoTable dimuat dari cdnjs saat pertama kali dipakai)
+const PDF_LIBS = ['https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js'];
+let pdfLibP = null;
+const loadScript = (src) => new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = src; sc.onload = res; sc.onerror = () => rej(new Error('Gagal memuat pustaka PDF (cek koneksi internet)')); document.head.appendChild(sc); });
+function loadPdfLib() {
+  if (window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API.autoTable) return Promise.resolve();
+  if (!pdfLibP) pdfLibP = (async () => { await loadScript(PDF_LIBS[0]); await loadScript(PDF_LIBS[1]); })().catch((e) => { pdfLibP = null; throw e; });
+  return pdfLibP;
+}
+// font bawaan PDF hanya mengenal karakter Latin: ganti tanda baca khusus, karakter lain jadi '?'
+const pdfTxt = (v) => String(v == null ? '' : v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').replace(/[\u2013\u2014]/g, '-').replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/\u2026/g, '...').replace(/[^\u0009\u000a\u000d\u0020-\u00ff]/g, '?');
+async function pdfDirect(reps, base) {
+  await loadPdfLib();
+  const doc = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
+  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 10;
+  reps.forEach((rep, i) => {
+    if (i) doc.addPage();
+    let y = M + 4;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(0); doc.text(pdfTxt('Panjar PSO · ' + rep.cab.n), M, y);
+    y += 5; doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(80); doc.text(pdfTxt(rep.per + ' · Sumber : PSO All Cabang'), M, y);
+    y += 7; doc.setTextColor(0);
+    for (const part of rep.parts) for (const b of part.blocks) {
+      if (y > H - 35) { doc.addPage(); y = M + 4; }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(0);
+      doc.text(pdfTxt(b.t.startsWith(part.name) ? b.t : part.name + ' · ' + b.t), M, y);
+      if (!b.rows.length) { doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(80); doc.text('Tidak ada data.', M, y + 5); doc.setTextColor(0); y += 12; continue; }
+      const nc = b.cols.length, fs = nc > 14 ? 5.5 : nc > 8 ? 6.5 : 8;
+      doc.autoTable({
+        startY: y + 2.5, margin: { left: M, right: M, top: M, bottom: 12 }, theme: 'grid', showHead: 'everyPage', tableWidth: 'auto',
+        head: [b.cols.map(([, l]) => pdfTxt(l))],
+        body: b.rows.map((r) => b.cols.map(([f, , k]) => pdfTxt(k === 'num' ? fmtNum(r[f]) : k === 'date' ? fmtDate(r[f]) : r[f]))),
+        styles: { font: 'helvetica', fontSize: fs, cellPadding: 1, lineColor: [200, 200, 200], lineWidth: 0.1, textColor: 0, overflow: 'linebreak', valign: 'middle' },
+        headStyles: { fillColor: [232, 237, 247], textColor: 0, fontStyle: 'bold', lineColor: [150, 150, 150] },
+        didParseCell: (d) => {
+          const k = b.cols[d.column.index] && b.cols[d.column.index][2];
+          if (k === 'num') d.cell.styles.halign = 'right';
+          if (d.section === 'body') { const r = b.rows[d.row.index]; if (r && (r.tot || r.gt)) d.cell.styles.fontStyle = 'bold'; }
+        },
+      });
+      y = doc.lastAutoTable.finalY + 8;
+    }
+  });
+  const n = doc.getNumberOfPages();
+  for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(110); doc.text(pdfTxt(base), M, H - 5); doc.text('Halaman ' + i + ' / ' + n, W - M, H - 5, { align: 'right' }); }
+  doc.save(base + '.pdf');
+}
+async function exportPdf(reps, base) {
+  const total = reps.reduce((a, r) => a + r.parts.reduce((x, p) => x + p.blocks.reduce((y, b) => y + (b.rows ? b.rows.length : 0), 0), 0), 0);
+  if (total > 6000 && !window.confirm('PDF ini memuat ' + idf.format(total) + ' baris, jadi bisa lambat dan sangat panjang. Untuk data lengkap Excel lebih ringan. Lanjutkan?')) return;
+  S.busy = true; paintStatus();
+  try { await pdfDirect(reps, base); $('#warn').textContent = ''; }
+  catch (err) { $('#warn').textContent = 'PDF langsung gagal dibuat (' + (err.message || err) + '). Memakai dialog cetak sebagai cadangan.'; S.busy = false; paintStatus(); printPdf(reps, base); return; }
+  S.busy = false; paintStatus();
+}
+
+// --- PDF through the browser print dialog (cadangan bila PDF langsung gagal)
 function printPdf(reps, title) {
   const total = reps.reduce((a, r) => a + r.parts.reduce((x, p) => x + p.blocks.reduce((y, b) => y + (b.rows ? b.rows.length : 0), 0), 0), 0);
   if (total > 6000 && !window.confirm('PDF ini memuat ' + idf.format(total) + ' baris, jadi bisa lambat dan sangat panjang. Untuk data lengkap Excel lebih ringan. Lanjutkan?')) return;
@@ -1065,7 +1120,7 @@ async function doExport(fmt, scope, cab, sub) {
     S.busy = true; paintStatus();
     try { download(await buildXlsx(reps, scope === 'all'), base + '.xlsx'); $('#warn').textContent = ''; } catch (err) { $('#warn').textContent = 'Export Excel gagal: ' + (err.message || err); }
     S.busy = false; paintStatus();
-  } else printPdf(reps, base);
+  } else await exportPdf(reps, base);
 }
 function buildExport(cab, sub) {
   const grp = el('div', 'expgrp');
@@ -1101,7 +1156,7 @@ function exportPopup(fmt) {
   if (!top || !top.parts) return;
   const cab = top.cab, rep = { cab, per: perLabel(cab.n), parts: top.parts() };
   const base = 'Panjar_PSO_' + SHORT[cab.n].replace(/ /g, '_') + '_' + top.title.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 60) + '_' + stamp();
-  if (fmt === 'pdf') printPdf([rep], base);
+  if (fmt === 'pdf') exportPdf([rep], base);
   else buildXlsx([rep], false).then((b) => download(b, base + '.xlsx')).catch((err) => { $('#warn').textContent = 'Export Excel gagal: ' + (err.message || err); });
 }
 $('#mpdf').addEventListener('click', () => exportPopup('pdf'));
