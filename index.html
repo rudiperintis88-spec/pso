@@ -262,14 +262,15 @@ h3{font-size:15px}
 (() => {
 'use strict';
 const SHEET_ID = '1pg4rKo1Inq_IAFC2gvb4i46HsmWf6LFzlSOxh0czJi0';
-const BRANCH_SHEETS = ['PSO Adam Malik', 'PSO GR Flamboyan', 'Body Repair', 'Otoxpert'];
+const BRANCH_SHEETS = ['PSO Adam Malik', 'PSO GR Flamboyan', 'Body Repair', 'Otoxpert', 'GR Gagak Hitam'];
 const CABS = [
-  { k: 'adam', n: 'GR Adam Malik', kepala: 'Muhammad Ridhowan' },
-  { k: 'flamboyan', n: 'GR Flamboyan', kepala: 'Hardi' },
-  { k: 'body', n: 'Body Repair', kepala: 'Muhammad Rifai' },
-  { k: 'otoxpert', n: 'Otoxpert', kepala: 'Edi' },
+  { k: 'adam', n: 'GR Adam Malik', kepala: 'Muhammad Ridhowan', always: true },
+  { k: 'flamboyan', n: 'GR Flamboyan', kepala: 'Hardi', always: true },
+  { k: 'body', n: 'Body Repair', kepala: 'Muhammad Rifai', always: true },
+  { k: 'otoxpert', n: 'Otoxpert', kepala: 'Edi', always: true },
+  { k: 'gagak', n: 'GR Gagak Hitam', kepala: '' },
 ];
-const CAB_OF_SHEET = { 'PSO Adam Malik': 'GR Adam Malik', 'PSO GR Flamboyan': 'GR Flamboyan', 'Body Repair': 'Body Repair', 'Otoxpert': 'Otoxpert' };
+const CAB_OF_SHEET = { 'PSO Adam Malik': 'GR Adam Malik', 'PSO GR Flamboyan': 'GR Flamboyan', 'Body Repair': 'Body Repair', 'Otoxpert': 'Otoxpert', 'GR Gagak Hitam': 'GR Gagak Hitam' };
 const KODE = { PF: 'GR Flamboyan', PP: 'GR Adam Malik', PB: 'Body Repair', OX: 'Otoxpert' };
 const KEL = ['Sudah dibukukan', 'Sudah ada penitipan, belum dibukukan', 'Panjar belum ada penitipan', 'Tanpa panjar', 'Batal'];
 const PAGE = 100;
@@ -486,18 +487,49 @@ function parseCsv(text) {
   if (f !== '' || row.length) { row.push(f); out.push(row.map((x) => (x === '' ? undefined : x))); }
   return out;
 }
+const SHEET_ALIASES = {
+  'PSO Adam Malik': ['PSO Adam Malik', 'GR Adam Malik', 'PSO GR Adam Malik'],
+  'PSO GR Flamboyan': ['PSO GR Flamboyan', 'GR Flamboyan', 'PSO Flamboyan'],
+  'Body Repair': ['Body Repair', 'GR Body Repair', 'PSO Body Repair'],
+  'Otoxpert': ['Otoxpert', 'GR Otoxpert', 'PSO Otoxpert'],
+  'GR Gagak Hitam': ['GR Gagak Hitam', 'PSO GR Gagak Hitam', 'PSO Gagak Hitam'],
+};
+const MKEY2 = 'pso_sheetnames_v1';
+let sheetMemo = {};
+try { sheetMemo = JSON.parse(localStorage.getItem(MKEY2)) || {}; } catch (e) { /* storage blocked */ }
+async function gviz(n) {
+  const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 40000);
+  try {
+    const res = await fetch('https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(n), { signal: ctl.signal });
+    if (!res.ok) throw new Error(n + ': HTTP ' + res.status);
+    const t = await res.text();
+    if (/^\s*<!?(html|doctype)/i.test(t)) throw new Error(n + ': butuh login atau akses');
+    return parseCsv(t);
+  } finally { clearTimeout(to); }
+}
+// a branch sheet has "Per : ..." in A1 and/or a NomorPSO header in its first rows; this also stops a wrong sheet from being read when a name does not exist
+const looksBranch = (tb) => tb.slice(0, 4).some((r) => (r || []).some((x) => x != null && /nomorpso|^\s*per\s*:/i.test(String(x))));
 async function fetchLive() {
-  const names = ['Data', 'Keterangan', ...BRANCH_SHEETS], tables = {};
-  await Promise.all(names.map(async (n) => {
-    const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 40000);
-    try {
-      const res = await fetch('https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(n), { signal: ctl.signal });
-      if (!res.ok) throw new Error(n + ': HTTP ' + res.status);
-      const t = await res.text();
-      if (/^\s*<!?(html|doctype)/i.test(t)) throw new Error(n + ': butuh login atau akses');
-      tables[n] = parseCsv(t);
-    } finally { clearTimeout(to); }
-  }));
+  const tables = {}, used = {};
+  const getBranch = async (canon) => {
+    const list = [...new Set([sheetMemo[canon], ...SHEET_ALIASES[canon]].filter(Boolean))];
+    let lastErr = null;
+    for (const n of list) {
+      try {
+        const tb = await gviz(n);
+        if (looksBranch(tb)) {
+          tables[canon] = tb; used[canon] = n;
+          if (sheetMemo[canon] !== n) { sheetMemo[canon] = n; try { localStorage.setItem(MKEY2, JSON.stringify(sheetMemo)); } catch (e) { /* ignore */ } }
+          return;
+        }
+        lastErr = new Error('Sheet "' + n + '" bukan tabel PSO');
+      } catch (e) { lastErr = e; }
+    }
+    if (canon === 'GR Gagak Hitam') { tables[canon] = []; return; }
+    throw new Error('Sheet ' + CAB_OF_SHEET[canon] + ' tidak ditemukan (nama yang dicoba: ' + list.join(', ') + ')' + (lastErr ? ' · ' + lastErr.message : ''));
+  };
+  await Promise.all([...['Data', 'Keterangan'].map(async (n) => { tables[n] = await gviz(n); }), ...BRANCH_SHEETS.map(getBranch)]);
+  tables.__used = used;
   return tables;
 }
 
@@ -758,12 +790,12 @@ function viewGrid(box, cab, key, title, note, cols, all, rowClass) {
   draw();
 }
 const dbRows = (cab) => S.rows.filter((r) => r.cabang === cab.n).map((r, i) => ({ no: i + 1, nomor_pso: r.nomor_pso, nama_customer: r.nama_customer, kode_brg: r.kode_brg, tgl_order: r.tgl_order, no_polisi: r.no_polisi, status: r.status, qty: r.qty, jlh: r.jlh, panjar: r.panjar, tgl_pjr: r.tgl_pjr0, ket: r.ket, wo_pso: r.wo_pso0, no_penitipan: r.no_penitipan0, sa: r.sa, divisi: r.divisi }));
-const SHEET_NAME = { 'GR Adam Malik': 'PSO Adam Malik', 'GR Flamboyan': 'PSO GR Flamboyan', 'Body Repair': 'Body Repair', 'Otoxpert': 'Otoxpert' };
+const SHEET_NAME = { 'GR Adam Malik': 'PSO Adam Malik', 'GR Flamboyan': 'PSO GR Flamboyan', 'Body Repair': 'Body Repair', 'Otoxpert': 'Otoxpert', 'GR Gagak Hitam': 'GR Gagak Hitam' };
 function viewPanjar(box, cab, rpt) {
   viewGrid(box, cab, 'panjar', 'Panjar PSO', 'Semua baris PSO non TWC dari spreadsheet. Tgl Dibukukan dan WONo (Dibukukan) dibaca dari sheet Data lewat No_Penitipan: bila WONo berisi tiga bagian, bagian tengah (WO) dipakai, dan bila kosong dipakai bagian akhir (TT). Setoran Bank, Selisih, Keterangan, Pelunasan LPK, dan Keterangan 2 dibaca dari sheet Keterangan lewat NomorPSO dan hanya tampil di baris pertama tiap PSO. Nomor disusun dari 1 menurut urutan sheet. Baris berwarna: Selisih tidak nol.', PJ_COLS, rpt.rows, (r) => (r.selisih ? 'warn' : ''));
 }
 function viewDb(box, cab) {
-  viewGrid(box, cab, 'db', 'Database', 'Seluruh baris sheet ' + SHEET_NAME[cab.n] + ' apa adanya, termasuk baris TWC, dengan urutan yang sama seperti di sheet. Nomor disusun dari 1.', DB_COLS, dbRows(cab), null);
+  viewGrid(box, cab, 'db', 'Database', 'Seluruh baris sheet ' + ((S.sheetUsed && S.sheetUsed[cab.n]) || SHEET_NAME[cab.n]) + ' apa adanya, termasuk baris TWC, dengan urutan yang sama seperti di sheet. Nomor disusun dari 1.', DB_COLS, dbRows(cab), null);
 }
 function viewSec(box, cab, rpt, key, title, note) {
   const s = S.sec[cab.n + key] || (S.sec[cab.n + key] = { q: '' }), card = el('div', 'card'), data = rpt.sec[key];
@@ -793,12 +825,14 @@ function tabs(items, active, onPick, cls) {
 }
 function render() {
   const root = $('#root'); root.replaceChildren();
+  const visible = CABS.filter((c) => c.always || S.rows.some((r) => r.cabang === c.n));
+  if (!visible.some((c) => c.k === S.cab)) S.cab = visible[0].k;
   const cab = CABS.find((c) => c.k === S.cab);
-  $('#cabtabs').replaceChildren(tabs(CABS.map((c) => [c.k, c.n]), S.cab, (k) => { S.cab = k; render(); }));
+  $('#cabtabs').replaceChildren(tabs(visible.map((c) => [c.k, c.n]), S.cab, (k) => { S.cab = k; render(); }));
   const head = el('div', 'cabhead'); head.append(el('h2', '', cab.n)); root.appendChild(head);
   const has = S.D.rekap.some((r) => r.cabang === cab.n);
   if (!has) {
-    const c = el('div', 'card'); c.append(el('h3', '', 'Belum ada baris PSO'), el('p', 'muted', 'Spreadsheet belum berisi baris PSO untuk ' + cab.n + '. Tab ini membaca sheet ' + SHEET_NAME[cab.n] + '. Begitu sheet itu berisi baris PSO dan data dimuat ulang, tab ini terisi.')); root.appendChild(c); paintStatus(); return;
+    const c = el('div', 'card'); c.append(el('h3', '', 'Belum ada baris PSO'), el('p', 'muted', 'Spreadsheet belum berisi baris PSO untuk ' + cab.n + '. Tab ini membaca sheet ' + ((S.sheetUsed && S.sheetUsed[cab.n]) || SHEET_NAME[cab.n]) + '. Begitu sheet itu berisi baris PSO dan data dimuat ulang, tab ini terisi.')); root.appendChild(c); paintStatus(); return;
   }
   const rpt = compute(cab.n);
   const cnt = (k) => rpt.list.filter((o) => o.sec === k).length;
@@ -831,14 +865,18 @@ async function loadLive() {
   if (loading) return;
   loading = true; S.busy = true; paintStatus();
   try {
-    const { rows, per } = buildRows(await fetchLive());
+    const tb = await fetchLive();
+    S.sheetUsed = {}; for (const k of BRANCH_SHEETS) if (tb.__used && tb.__used[k]) S.sheetUsed[CAB_OF_SHEET[k]] = tb.__used[k];
+    const { rows, per } = buildRows(tb);
     if (!rows.length) throw new Error('Tidak ada baris PSO terbaca');
     const same = S.mode === 'live' && sigAll(rows, per) === S.sig;
     S.mode = 'live'; S.at = new Date(); S.err = ''; S.busy = false;
-    if (same) paintStatus(); else setRows(rows, per);
+    if (/^Sheet /.test(S.warn)) S.warn = '';
+    if (same) { paintStatus(); $('#warn').textContent = S.warn; } else setRows(rows, per);
   } catch (e) {
     S.err = e && e.message ? e.message : 'gagal'; S.busy = false;
-    if (!S.rows.length) { const sn = await snapshotRows(); S.snapAt = sn.at; setRows(sn.rows, sn.per); } else paintStatus();
+    if (/^Sheet /.test(S.err)) S.warn = S.err;
+    if (!S.rows.length) { const sn = await snapshotRows(); S.snapAt = sn.at; setRows(sn.rows, sn.per); } else { paintStatus(); $('#warn').textContent = S.warn; }
   } finally { loading = false; }
 }
 let timer = null;
@@ -846,7 +884,7 @@ const startTimer = () => { clearInterval(timer); timer = setInterval(() => loadL
 $('#reload').addEventListener('click', () => loadLive());
 
 // ---------- export: Excel (.xlsx made in the browser) and PDF (print dialog -> Save as PDF)
-const SHORT = { 'GR Flamboyan': 'Flamboyan', 'GR Adam Malik': 'Adam Malik', 'Body Repair': 'Body Repair', 'Otoxpert': 'Otoxpert' };
+const SHORT = { 'GR Flamboyan': 'Flamboyan', 'GR Adam Malik': 'Adam Malik', 'Body Repair': 'Body Repair', 'Otoxpert': 'Otoxpert', 'GR Gagak Hitam': 'Gagak Hitam' };
 const REK2 = [['u', 'Uraian'], ['v', 'Jumlah (Rp)', 'num']];
 function reportOf(cab) {
   const rpt = compute(cab.n);
