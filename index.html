@@ -519,15 +519,21 @@ const SHEET_ALIASES = {
 const MKEY2 = 'pso_sheetnames_v1';
 let sheetMemo = {};
 try { sheetMemo = JSON.parse(localStorage.getItem(MKEY2)) || {}; } catch (e) { /* storage blocked */ }
-async function gviz(n) {
+async function gviz1(n) {
   const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 40000);
   try {
-    const res = await fetch('https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(n), { signal: ctl.signal });
+    // cache-buster + no-store: setiap refresh (manual / otomatis) selalu mengambil data terbaru dari Google, bukan salinan cache browser
+    const bust = Date.now() + '' + Math.floor(Math.random() * 1e6);
+    const res = await fetch('https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(n) + '&_=' + bust, { signal: ctl.signal, cache: 'no-store' });
     if (!res.ok) throw new Error(n + ': HTTP ' + res.status);
     const t = await res.text();
     if (/^\s*<!?(html|doctype)/i.test(t)) throw new Error(n + ': butuh login atau akses');
     return parseCsv(t);
   } finally { clearTimeout(to); }
+}
+async function gviz(n) {
+  try { return await gviz1(n); }
+  catch (e) { if (e && /butuh login/.test(e.message || '')) throw e; return await gviz1(n); } // coba sekali lagi bila gangguan jaringan sesaat
 }
 // a branch sheet has "Per : ..." in A1 and/or a NomorPSO header in its first rows; this also stops a wrong sheet from being read when a name does not exist
 const looksBranch = (tb) => tb.slice(0, 4).some((r) => (r || []).some((x) => x != null && /nomorpso|^\s*per\s*:/i.test(String(x))));
@@ -566,7 +572,13 @@ const setMeta = (cab, key, v) => { stored[cab + '|' + key] = v; try { localStora
 // ---------- state
 const S = { rows: [], D: null, cab: 'adam', sub: {}, pj: {}, sec: {}, warn: '', perText: {}, sig: '', mode: 'snap', at: null, err: '', busy: false, fileName: '', snapAt: '', per: '' };
 const sig = (rows) => rows.length + '|' + rows.reduce((a, r) => a + (r.jlh || 0) + (r.panjar || 0) * 7 + (r.tgl_dibukukan ? 1 : 0) + (r.no_penitipan ? 3 : 0) + (r.status === 'TWC' ? 5 : 0) + (r.setoran_bank || 0) * 11, 0) + '|' + rows.reduce((a, r) => a + (r.ket ? r.ket.length : 0) + (r.keterangan ? r.keterangan.length * 13 : 0) + (r.keterangan_2 ? r.keterangan_2.length * 17 : 0) + (r.pelunasan_lpk ? 19 : 0) + (r.selisih_sheet || 0), 0);
-const sigAll = (rows, per) => sig(rows) + '|' + JSON.stringify(per || {});
+const sigAll = (rows, per) => {
+  // tanda pengenal dari SELURUH isi data (bukan hanya beberapa kolom), supaya perubahan apa pun di spreadsheet pasti terdeteksi
+  const s = JSON.stringify(rows) + '|' + JSON.stringify(per || {});
+  let h1 = 5381, h2 = 52711;
+  for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); h1 = (Math.imul(h1, 33) ^ c) | 0; h2 = (Math.imul(h2, 31) + c) | 0; }
+  return s.length + '|' + h1 + '|' + h2;
+};
 function setRows(rows, per) {
   S.rows = rows; S.D = derive(rows); S.perText = per || {}; S.sig = sigAll(rows, per); render();
 }
@@ -882,10 +894,10 @@ async function snapshotRows() {
   const sn = JSON.parse(await new Response(new Blob([b]).stream().pipeThrough(new DecompressionStream('gzip'))).text());
   return { rows: sn.rows.map((a, i) => { const o = { id: i + 1 }; sn.cols.forEach((c, j) => { o[c] = a[j]; }); return o; }), at: sn.at, per: sn.per || {} };
 }
-let loading = false;
-async function loadLive() {
-  if (loading) return;
-  loading = true; S.busy = true; paintStatus();
+let loading = false, again = false, lastLoad = 0;
+async function loadLive(force) {
+  if (loading) { if (force) again = true; return; } // klik Refresh saat masih memuat: diulang otomatis setelah selesai
+  loading = true; lastLoad = Date.now(); S.busy = true; paintStatus();
   try {
     const tb = await fetchLive();
     S.sheetUsed = {}; for (const k of BRANCH_SHEETS) if (tb.__used && tb.__used[k]) S.sheetUsed[CAB_OF_SHEET[k]] = tb.__used[k];
@@ -899,11 +911,14 @@ async function loadLive() {
     S.err = e && e.message ? e.message : 'gagal'; S.busy = false;
     if (/^Sheet /.test(S.err)) S.warn = S.err;
     if (!S.rows.length) { const sn = await snapshotRows(); S.snapAt = sn.at; setRows(sn.rows, sn.per); } else { paintStatus(); $('#warn').textContent = S.warn; }
-  } finally { loading = false; }
+  } finally { loading = false; if (again) { again = false; loadLive(); } }
 }
 let timer = null;
 const startTimer = () => { clearInterval(timer); timer = setInterval(() => loadLive(), EVERY * 60000); };
-$('#reload').addEventListener('click', () => loadLive());
+$('#reload').addEventListener('click', () => loadLive(true));
+// tab yang sempat di background / koneksi kembali: baca ulang semua sheet (timer browser bisa tertahan saat tab tidak aktif)
+document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - lastLoad > 15000) loadLive(); });
+window.addEventListener('online', () => loadLive(true));
 
 // ---------- export: Excel (.xlsx made in the browser) and PDF (print dialog -> Save as PDF)
 const SHORT = { 'GR Flamboyan': 'Flamboyan', 'GR Adam Malik': 'Adam Malik', 'Body Repair': 'Body Repair', 'Otoxpert': 'Otoxpert', 'GR Gagak Hitam': 'Gagak Hitam' };
