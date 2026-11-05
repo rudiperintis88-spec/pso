@@ -242,7 +242,8 @@ h3{font-size:15px}
 <div id="gate" class="gate">
   <form id="gateForm" class="gatebox" autocomplete="off">
     <h1>Panjar PSO Per Cabang</h1>
-    <p class="muted">Masukkan password untuk membuka dashboard.</p>
+    <p class="muted">Masukkan nama dan password untuk membuka dashboard.</p>
+    <input type="text" id="gateName" placeholder="Nama" aria-label="Nama lengkap" autocomplete="off" autocapitalize="off" spellcheck="false" required autofocus>
     <input type="password" id="gateInput" placeholder="Password" aria-label="Password" autocomplete="off">
     <button type="submit" class="rbtn gobtn"><span>Masuk</span></button>
     <p id="gateErr" class="gateerr" aria-live="polite"></p>
@@ -1178,15 +1179,75 @@ const start = async () => {
 // ---------- password: asked every time the page is opened or reloaded (kept in memory only)
 const h53 = (str) => { let h1 = 0xdeadbeef, h2 = 0x41c6ce57; for (let i = 0; i < str.length; i++) { const ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); } h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909); h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909); return 4294967296 * (2097151 & h2) + (h1 >>> 0); };
 const PASS_HASH = 2998845077603307;
-const gate = $('#gate'), gateForm = $('#gateForm'), gateInput = $('#gateInput'), gateErr = $('#gateErr');
-gateForm.addEventListener('submit', (ev) => {
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyLl7p16a1CSTj2prCGzKjUDxeIEyJsWwaCG_Nu2EEIFV2eoDlB7onRJ0KvMyPnNaAljw/exec';
+const CABANG_NAME = 'Panjar PSO Per Cabang';
+const NAMA_KATA_TERLARANG = ["panjar","pso","cabang","dashboard","perintis","perkasa","test","tes","admin","nama"];
+function validName(v){
+  v = (v || '').trim();
+  if (!/^[A-Za-z.' -]+$/.test(v)) return false;
+  const words = v.split(/\s+/).filter(Boolean);
+  if (words.length < 2) return false;
+  const lower = v.toLowerCase();
+  for (let i = 0; i < NAMA_KATA_TERLARANG.length; i++){
+    if (lower.indexOf(NAMA_KATA_TERLARANG[i]) >= 0) return false;
+  }
+  return true;
+}
+function _ambilPerangkat(){var ua=navigator.userAgent||'';var os='Tidak diketahui';if(/Windows/i.test(ua))os='Windows';else if(/Android/i.test(ua))os='Android';else if(/iPhone|iPad|iPod/i.test(ua))os='iOS';else if(/Macintosh|Mac OS/i.test(ua))os='Mac';else if(/Linux/i.test(ua))os='Linux';var br='Tidak diketahui';if(/Edg\//i.test(ua))br='Edge';else if(/OPR\//i.test(ua))br='Opera';else if(/Chrome\//i.test(ua)&&!/Chromium/i.test(ua))br='Chrome';else if(/Firefox\//i.test(ua))br='Firefox';else if(/Safari\//i.test(ua)&&!/Chrome/i.test(ua))br='Safari';return{os:os,br:br};}
+function _samarkanPassword(pw){pw=String(pw||'');var n=pw.length;if(!n)return '';if(n<=4)return pw[0]+'*'.repeat(n-1);return pw.slice(0,2)+'*'.repeat(n-4)+pw.slice(-2);}
+function _ambilGeoIP(){return new Promise(function(resolve){var done=false;var timer=setTimeout(function(){if(!done){done=true;resolve({});}},2500);fetch('https://ipapi.co/json/').then(function(r){return r.json();}).then(function(d){if(done)return;done=true;clearTimeout(timer);resolve({ip:d.ip||'-',negara:d.country_name||'-',kota:d.city||'-',lat:(d.latitude!=null?d.latitude:''),lng:(d.longitude!=null?d.longitude:'')});}).catch(function(){if(!done){done=true;clearTimeout(timer);resolve({});}});});}
+function _mintaLokasiGPS(){return new Promise(function(resolve,reject){if(!navigator.geolocation){reject('nogeo');return;}navigator.geolocation.getCurrentPosition(function(pos){resolve({lat:pos.coords.latitude,lng:pos.coords.longitude});},function(err){reject(err);},{enableHighAccuracy:true,timeout:10000,maximumAge:60000});});}
+function _isMobileDevice(){return /Android|iPhone|iPad|iPod|Mobile|Windows Phone|BlackBerry|webOS/i.test(navigator.userAgent||'');}
+function _alamatDariKoordinat(lat,lng){return fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lon='+lng+'&zoom=18&addressdetails=1',{headers:{'Accept':'application/json'}}).then(function(r){return r.json();}).then(function(d){var a=d.address||{};return{alamat:d.display_name||'-',negara:a.country||'-',kota:a.city||a.town||a.village||a.county||a.regency||'-'};}).catch(function(){return{alamat:'-',negara:'-',kota:'-'};});}
+function _getDeviceId(){try{var id=localStorage.getItem('pp_device_id');if(!id||id==='undefined'||id==='null'){id=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)+'-'+Math.random().toString(36).slice(2);localStorage.setItem('pp_device_id',id);}return id;}catch(e){return 'no-storage-'+Date.now()+'-'+Math.random().toString(36).slice(2);}}
+function _cekPerangkatSekali(nama,cabang,urlScript){return new Promise(function(resolve){var id=_getDeviceId();var cbName='_devcb_'+Date.now()+'_'+Math.floor(Math.random()*1e6);var done=false;var script=document.createElement('script');var timer=setTimeout(function(){if(!done){done=true;cleanup();resolve(null);}},9000);function cleanup(){clearTimeout(timer);try{delete window[cbName];}catch(e){window[cbName]=undefined;}if(script.parentNode)script.parentNode.removeChild(script);}window[cbName]=function(data){if(done)return;done=true;cleanup();resolve(data||null);};script.src=urlScript+'?action=cek&device='+encodeURIComponent(id)+'&nama='+encodeURIComponent(nama)+'&cabang='+encodeURIComponent(cabang)+'&callback='+cbName;script.onerror=function(){if(!done){done=true;cleanup();resolve(null);}};document.body.appendChild(script);});}
+function _cekPerangkat(nama,cabang,urlScript){return _cekPerangkatSekali(nama,cabang,urlScript).then(function(r){if(r)return r;return _cekPerangkatSekali(nama,cabang,urlScript);}).then(function(r){if(r)return r;return _cekPerangkatSekali(nama,cabang,urlScript);}).then(function(r){return r||{status:'error'};});}
+function sendLoginNotif(nama, cabang, pwTyped, loc){
+  var _dev = _ambilPerangkat();
+  _ambilGeoIP().then(function(geo){
+    if(loc){geo.lat=loc.lat;geo.lng=loc.lng;if(loc.negara)geo.negara=loc.negara;if(loc.kota)geo.kota=loc.kota;}
+    try {
+      fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ nama: nama, status: 'Berhasil', password: _samarkanPassword(pwTyped), cabang: cabang, link: location.href, akses: 'Akses Dashboard', perangkat: _dev.os, browser: _dev.br, ip: geo.ip||'-', negara: geo.negara||'-', kota: geo.kota||'-', lat: geo.lat||'', lng: geo.lng||'', alamat: (loc&&loc.alamat)||'-', waktu: new Date().toISOString() })
+      });
+    } catch (e) {}
+  });
+}
+const gate = $('#gate'), gateForm = $('#gateForm'), gateName = $('#gateName'), gateInput = $('#gateInput'), gateErr = $('#gateErr');
+gateForm.addEventListener('submit', async (ev) => {
   ev.preventDefault();
-  if (h53(gateInput.value) === PASS_HASH) {
-    gate.hidden = true; document.body.classList.remove('locked'); gateInput.value = ''; gateErr.textContent = '';
-    start();
-  } else { gateErr.textContent = 'Password salah. Coba lagi.'; gateInput.value = ''; gateInput.focus(); }
+  if (!gateName.value.trim()){ gateErr.textContent = 'Nama wajib diisi.'; gateName.focus(); return; }
+  if (!validName(gateName.value)){ gateErr.textContent = 'Masukkan nama lengkap yang benar (minimal 2 kata).'; gateName.focus(); return; }
+  if (h53(gateInput.value) !== PASS_HASH) { gateErr.textContent = 'Password salah. Coba lagi.'; gateInput.value = ''; gateInput.focus(); return; }
+  const btn = gateForm.querySelector('button[type="submit"]');
+  btn.disabled = true; gateErr.textContent = 'Memeriksa perangkat…';
+  const namaTyped = gateName.value.trim(), pwTyped = gateInput.value;
+  const _devChk = await _cekPerangkat(namaTyped, CABANG_NAME, APPS_SCRIPT_URL);
+  if (_devChk.status !== 'approved') {
+    gateErr.textContent = _devChk.status==='pending' ? 'Perangkat ini belum disetujui admin. Permintaan sudah dikirim, coba Masuk lagi setelah disetujui.' : (_devChk.status==='rejected' ? 'Perangkat ini ditolak admin.' : 'Tidak bisa menghubungi server. Coba lagi.');
+    btn.disabled = false; return;
+  }
+  let _loc = null;
+  if (_isMobileDevice()) {
+    gateErr.textContent = 'Meminta izin lokasi…';
+    try {
+      const _gps = await _mintaLokasiGPS();
+      const _geo = await _alamatDariKoordinat(_gps.lat, _gps.lng);
+      _loc = {lat:_gps.lat, lng:_gps.lng, alamat:_geo.alamat, negara:_geo.negara, kota:_geo.kota};
+    } catch (gpsErr) {
+      gateErr.textContent = 'Izin lokasi diperlukan untuk login. Mohon izinkan akses lokasi, lalu coba lagi.';
+      btn.disabled = false; return;
+    }
+  }
+  sendLoginNotif(namaTyped, CABANG_NAME, pwTyped, _loc);
+  gate.hidden = true; document.body.classList.remove('locked'); gateInput.value = ''; gateErr.textContent = ''; btn.disabled = false;
+  start();
 });
-setTimeout(() => gateInput.focus(), 50);
+window.addEventListener('pageshow', function(e){ if(e.persisted) location.reload(); });
+setTimeout(() => gateName.focus(), 50);
 })();
 
 </script>
