@@ -700,6 +700,11 @@ function compute(cab) {
 
 // ---------- table helper
 function table(cols, data, rowClass, onRow) {
+  if (cols.length && cols[0][0] !== 'no') {
+    cols = [['__no', 'No'], ...cols];
+    let n = 0;
+    data = data.map((r) => ({ ...r, __no: (r.tot || r.gt || r.kelompok === 'Semua') ? '' : ++n }));
+  }
   const wrap = el('div', 'scroll'), t = el('table', 'tbl'), thead = el('thead'), htr = el('tr');
   cols.forEach(([, l]) => htr.appendChild(el('th', '', l)));
   thead.appendChild(htr); t.appendChild(thead);
@@ -709,6 +714,7 @@ function table(cols, data, rowClass, onRow) {
     if (onRow && !(r.tot || r.gt && !r.u)) { tr.classList.add('click'); tr.tabIndex = 0; tr.addEventListener('click', () => onRow(r)); tr.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') onRow(r); }); }
     for (const [f, , k] of cols) {
       const td = el('td'); const v = r[f];
+      if (f === '__no') { td.className = 'num'; td.textContent = v == null ? '' : String(v); tr.appendChild(td); continue; }
       if (k === 'num') { td.className = 'num'; td.textContent = fmtNum(v); }
       else if (k === 'date') td.textContent = fmtDate(v);
       else { td.textContent = v == null ? '' : String(v); if (f === 'ket' || f === 'uraian') td.className = 'wrap'; }
@@ -732,10 +738,13 @@ function sortRows(cols, rows, st) {
   return main.concat(tail);
 }
 function headSort(t, cols, st, redraw) {
-  t.wrap.querySelectorAll('thead th').forEach((th, i) => {
+  const ths = [...t.wrap.querySelectorAll('thead th')], off = ths.length - cols.length;
+  ths.forEach((th, i) => {
+    if (i < off) return;
+    const c = cols[i - off];
     th.classList.add('sortable');
-    if (cols[i][0] === st.f) th.appendChild(el('span', 'sarrow', st.dir > 0 ? ' ▲' : ' ▼'));
-    th.addEventListener('click', () => { if (st.f === cols[i][0]) st.dir = -st.dir; else { st.f = cols[i][0]; st.dir = 1; } redraw(); });
+    if (c[0] === st.f) th.appendChild(el('span', 'sarrow', st.dir > 0 ? ' ▲' : ' ▼'));
+    th.addEventListener('click', () => { if (st.f === c[0]) st.dir = -st.dir; else { st.f = c[0]; st.dir = 1; } redraw(); });
   });
   return t;
 }
@@ -825,19 +834,19 @@ function rekCard(cab, rpt) {
   const card = el('div', 'card');
   card.append(el('h3', '', 'Rekonsiliasi panjar dan setoran'), el('p', 'muted', 'Sama dengan blok total di bawah sheet Panjar PSO. Baris dengan kotak isian bisa Bapak isi sendiri. Pembatalan panjar PSO dan Panjar masih berjalan memakai total catatan A dan B bila kotaknya dikosongkan, dan memakai angka yang Bapak ketik bila diisi. Nilainya bisa Bapak ubah dan tersimpan di browser ini.'));
   const wrap = el('div', 'scroll'), t = el('table', 'tbl'), thead = el('thead'), htr = el('tr');
-  htr.append(el('th', '', 'Uraian'), el('th', '', 'Jumlah (Rp)')); thead.appendChild(htr); t.appendChild(thead);
-  const tb = el('tbody');
+  htr.append(el('th', '', 'No'), el('th', '', 'Uraian'), el('th', '', 'Jumlah (Rp)')); thead.appendChild(htr); t.appendChild(thead);
+  const tb = el('tbody'); let rn = 0;
   for (const r of rpt.rek) {
     const tr = el('tr', r.gt ? 'gt' : ''), a = el('td', 'wrap', r.u), b = el('td', 'num');
     if (r.edit) b.appendChild(inp('text', r.auto != null ? (r.set ? idf.format(r.v) : '') : (r.v ? idf.format(r.v) : ''), (val) => { setMeta(cab.n, r.edit, val.trim() === '' ? undefined : num(val)); render(); }, r.auto != null ? idf.format(r.auto) : '0', 'cell numin'));
     else b.textContent = r.v == null ? '—' : idf.format(r.v);
-    tr.append(a, b); tb.appendChild(tr);
+    tr.append(el('td', 'num', String(++rn)), a, b); tb.appendChild(tr);
   }
   t.appendChild(tb); wrap.appendChild(t); card.appendChild(wrap);
   return card;
 }
 function viewRingkasan(box, cab, rpt) {
-  const rk = S.D.rekap.filter((r) => r.cabang === cab.n);
+  const rk = S.D.rekap.filter((r) => r.cabang === cab.n).sort(byKel);
   box.appendChild(el('p', 'take', cab.n + ': grand total panjar Rp ' + idf.format(rpt.grand) + ' setelah pembatalan Rp ' + idf.format(rpt.pemb) + ' dan panjar masih berjalan Rp ' + idf.format(rpt.berj) + '. ' + (rpt.selisih == null ? 'Selisih terhadap catatan A, B dan C belum bisa dihitung sebelum slip setoran diisi.' : 'Selisih terhadap catatan A, B dan C: Rp ' + idf.format(rpt.selisih) + '.')));
   const k = el('div', 'kpis');
   k.append(kpi('Total panjar', rpt.tot.panjar, 'Jumlah kolom Panjar, semua PSO non TWC', () => openYear(cab)), kpi('Pembatalan panjar PSO', rpt.pemb, rpt.A.length + ' PSO di catatan A', () => openCat(cab, 'A', 'Catatan A · Pembatalan · ' + cab.n, 'PSO yang dibatalkan beserta panjarnya.')), kpi('Panjar masih berjalan', rpt.berj, rpt.B.length + ' PSO di catatan B', () => openCat(cab, 'B', 'Catatan B · Panjar masih berjalan · ' + cab.n, 'PSO yang Keterangan-nya masih berjalan.')), kpi('Grand total', rpt.grand, 'Total panjar dikurangi pembatalan dan yang masih berjalan', () => openGrand(cab)), kpi('Lebih setoran', rpt.lebih, rpt.lebih == null ? 'Isi slip setoran di tabel rekonsiliasi' : 'Grand total dikurangi slip setoran', () => openCat(cab, 'C', 'Catatan C · Kekurangan panjar dan sudah lunas tanpa panjar · ' + cab.n, 'Penyebab lebih setoran.')));
@@ -986,7 +995,7 @@ const SHORT = { 'GR Flamboyan': 'Flamboyan', 'GR Adam Malik': 'Adam Malik', 'Bod
 const REK2 = [['u', 'Uraian'], ['v', 'Jumlah (Rp)', 'num']];
 function reportOf(cab) {
   const rpt = compute(cab.n);
-  const kel = S.D.rekap.filter((r) => r.cabang === cab.n);
+  const kel = S.D.rekap.filter((r) => r.cabang === cab.n).sort(byKel);
   const cat = (k) => [...rpt[k], { no: '', uraian: 'Total', jumlah: rpt.sum[k], tot: true }];
   const db = dbRows(cab);
   return {
@@ -1050,6 +1059,13 @@ function sheetXml(rows, widths, freeze) {
   });
   return x + '</sheetData></worksheet>';
 }
+function numberBlocks(reps) {
+  return reps.map((rep) => ({ ...rep, parts: rep.parts.map((p) => ({ ...p, blocks: p.blocks.map((b) => {
+    if (!b.cols.length || b.cols[0][0] === 'no') return b;
+    let n = 0;
+    return { ...b, cols: [['no', 'No'], ...b.cols], rows: b.rows.map((r) => ({ ...r, no: (r.tot || r.gt || r.kelompok === 'Semua') ? '' : ++n })) };
+  }) })) }));
+}
 function cellsOf(cols, r) {
   return cols.map(([f, , k]) => { const v = r[f]; if (v == null || v === '') return null; if (f === 'no' && typeof v === 'number') return { v, s: 'n' }; if (k === 'num') return typeof v === 'number' ? v : null; if (k === 'date') return /^\d{4}-\d{2}-\d{2}/.test(v) ? { d: String(v).slice(0, 10) } : String(v); return String(v); });
 }
@@ -1071,6 +1087,7 @@ function sheetFromPart(part) {
   return { rows, widths, freeze };
 }
 async function buildXlsx(reps, all) {
+  reps = numberBlocks(reps);
   const sheets = [];
   for (const rep of reps) for (const part of rep.parts) { const sh = sheetFromPart(part); sh.name = ((all ? SHORT[rep.cab.n] + ' - ' : '') + part.name).replace(/[\\\/?*\[\]:]/g, '-').slice(0, 31); sheets.push(sh); }
   const files = [
@@ -1098,6 +1115,7 @@ function loadPdfLib() {
 // font bawaan PDF hanya mengenal karakter Latin: ganti tanda baca khusus, karakter lain jadi '?'
 const pdfTxt = (v) => String(v == null ? '' : v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').replace(/[\u2013\u2014]/g, '-').replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/\u2026/g, '...').replace(/[^\u0009\u000a\u000d\u0020-\u00ff]/g, '?');
 async function pdfDirect(reps, base) {
+  reps = numberBlocks(reps);
   await loadPdfLib();
   const doc = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
   const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 10;
@@ -1143,6 +1161,7 @@ async function exportPdf(reps, base) {
 
 // --- PDF through the browser print dialog (cadangan bila PDF langsung gagal)
 function printPdf(reps, title) {
+  reps = numberBlocks(reps);
   const total = reps.reduce((a, r) => a + r.parts.reduce((x, p) => x + p.blocks.reduce((y, b) => y + (b.rows ? b.rows.length : 0), 0), 0), 0);
   if (total > 6000 && !window.confirm('PDF ini memuat ' + idf.format(total) + ' baris, jadi bisa lambat dan sangat panjang. Untuk data lengkap Excel lebih ringan. Lanjutkan?')) return;
   const pa = $('#printArea'); pa.replaceChildren();
@@ -1224,6 +1243,8 @@ document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && !modal
 const money = (v) => (v == null ? '—' : 'Rp ' + idf.format(v));
 const LIST_COLS = [['nomor_pso', 'NomorPSO'], ['nama_customer', 'NamaCustomer'], ['tgl_order', 'TglOrder', 'date'], ['sa', 'Service Advisor'], ['baris', 'Baris', 'num'], ['jlh', 'Jlh', 'num'], ['panjar', 'Panjar', 'num'], ['tgl_pjr', 'TglPjr', 'date'], ['no_penitipan', 'No_Penitipan'], ['tgl_dibukukan', 'Tgl Dibukukan', 'date'], ['kelompok', 'Kelompok']];
 const ITEM_COLS = [['kode_brg', 'KodeBrg'], ['qty', 'Qty', 'num'], ['jlh', 'Jlh', 'num'], ['panjar', 'Panjar', 'num'], ['tgl_pjr', 'TglPjr', 'date'], ['ket', 'Ket'], ['wo_pso', 'WONo (PSO)'], ['no_penitipan', 'No_Penitipan'], ['tgl_dibukukan', 'Tgl Dibukukan', 'date'], ['wo', 'WONo (Dibukukan)'], ['setoran_bank', 'Setoran Bank', 'num'], ['selisih', 'Selisih', 'num']];
+const KEL_ORDER = ['Sudah dibukukan', 'Sudah ada penitipan, belum dibukukan', 'Panjar belum ada penitipan', 'Tanpa panjar', 'Batal', 'Semua'];
+const byKel = (a, b) => KEL_ORDER.indexOf(a.kelompok) - KEL_ORDER.indexOf(b.kelompok);
 const SECN = { clear: 'Clear', tanpa: 'Tanpa panjar', jalan: 'Masih berjalan' };
 
 function openPso(cab, pso) {
