@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#ffffff">
 <title>PSO Per Cabang</title>
 <meta property="og:title" content="PSO Per Cabang">
 <meta property="og:site_name" content="PSO Per Cabang">
@@ -18,8 +20,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#ffffff;--panel:#ffffff;--soft:#f6f7fa;--fg:#14161a;--muted:#6b7280;--line:#e3e6ec;--accent:#2563eb;--accent-soft:#eef2fb;--accent-line:#d5def2;--c1:#2563eb;--c2:#f59e0b;--warn:#fff3d6;--bad:#b3261e;--radius:8px;--serif:'Fraunces','Playfair Display',Georgia,'Times New Roman',serif;--sans:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif}
-@media (prefers-color-scheme:dark){:root{--bg:#15171b;--panel:#1d2025;--soft:#1a1d21;--fg:#eceef2;--muted:#9aa1ad;--line:#2f343c;--accent:#5b8def;--accent-soft:#232b3d;--accent-line:#33405e;--c1:#6aa0ff;--c2:#f0b04a;--warn:#4a3a1d;--bad:#ff8a80}}
+:root{color-scheme:light;--bg:#ffffff;--panel:#ffffff;--soft:#ffffff;--fg:#14161a;--muted:#6b7280;--line:#e3e6ec;--accent:#2563eb;--accent-soft:#ffffff;--accent-line:#d5def2;--c1:#2563eb;--c2:#f59e0b;--warn:#fff3d6;--bad:#b3261e;--radius:8px;--serif:'Fraunces','Playfair Display',Georgia,'Times New Roman',serif;--sans:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 var(--sans)}
 .page{max-width:1500px;margin:0 auto;padding:clamp(12px,3vw,32px)}
@@ -63,7 +64,7 @@ label.file input{display:none}
 .chart svg{display:block}
 .chart text{font-size:11px;fill:var(--muted);font-family:var(--sans)}
 .chart .grid{stroke:var(--line)} .chart .rule{stroke:var(--muted)}
-.tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 4px 14px rgba(0,0,0,.18);padding:4px 8px;font-size:13px;white-space:nowrap;z-index:3}
+.tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:none;padding:4px 8px;font-size:13px;white-space:nowrap;z-index:3}
 .tip .t1{color:var(--muted)}
 
 .ftabs{display:block;margin:0 0 4px}
@@ -99,7 +100,7 @@ label.file input{display:none}
 .subrow .xbtn{padding:7px 14px 7px 16px;font-size:14px;border-radius:10px}
 .xbtn{padding:9px 16px 9px 20px;gap:8px}
 .caret{font-size:14px;color:var(--muted)}
-.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:20;min-width:260px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.16);padding:6px;text-align:left}
+.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:20;min-width:260px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:none;padding:6px;text-align:left}
 .menu[hidden]{display:none}
 .menu .mh{font-size:12px;font-weight:600;color:var(--muted);padding:8px 10px 4px;text-transform:uppercase;letter-spacing:.04em}
 .menu button{display:block;width:100%;text-align:left;border:0;background:none;border-radius:8px;padding:9px 10px;font-size:15px;color:var(--fg);cursor:pointer}
@@ -130,9 +131,9 @@ label.file input{display:none}
 .kpi.click{cursor:pointer;transition:border-color .15s}
 .kpi.click:hover,.kpi.click:focus{border-color:var(--accent);outline:none}
 .hint{font-size:12px;color:var(--accent);margin-top:2px}
-.modal{position:fixed;inset:0;z-index:60;background:rgba(10,12,16,.5);display:flex;align-items:center;justify-content:center;padding:3vh 3vw}
+.modal{position:fixed;inset:0;z-index:60;background:rgba(255,255,255,.96);display:flex;align-items:center;justify-content:center;padding:3vh 3vw}
 .modal[hidden]{display:none}
-.mbox{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:14px;width:min(1180px,100%);max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.mbox{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:14px;width:min(1180px,100%);max-height:92vh;display:flex;flex-direction:column;box-shadow:none}
 .mhead{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
 .mhead{flex-wrap:wrap}
 .mhead h3{flex:1;min-width:12rem;font-size:18px;margin:0;overflow-wrap:anywhere}
