@@ -358,13 +358,15 @@ const findPer = (sr) => {
 const normH = (x) => String(x == null ? '' : x).toLowerCase().replace(/[^a-z0-9]/g, '');
 const BR_HDR = { nomor_pso: ['nomorpso'], nama_customer: ['namacustomer'], kode_brg: ['kodebrg', 'kodebarang'], nama_barang: ['namabarang', 'namabrg', 'namaitem', 'namapart'], tgl_order: ['tglorder'], no_polisi: ['nopolisi'], status: ['status'], qty: ['qty'], jlh: ['jlh'], panjar: ['panjar'], tgl_pjr: ['tglpjr'], ket: ['ket'], wo_pso: ['wonopso', 'wopso', 'wono'], no_penitipan: ['nopenitipan'], sa: ['sa'], divisi: ['divisi'] };
 const BR_DEF = { nomor_pso: 1, nama_customer: 2, kode_brg: 3, tgl_order: 4, no_polisi: 5, status: 6, qty: 7, jlh: 8, panjar: 9, tgl_pjr: 10, ket: 11, wo_pso: 12, no_penitipan: 13, sa: 14, divisi: 15 };
+const isNamaBrg = (h) => !!h && (BR_HDR.nama_barang.includes(h) || /^(barang|item|produk|part|deskripsi|description)$/.test(h) || (/nama/.test(h) && /(barang|brg|item|part|produk)/.test(h)));
 function branchCols(sr) {
   let best = null, top = 0;
   for (let i = 0; i < Math.min(sr.length, 6); i++) {
     const hs = (sr[i] || []).map(normH), m = {}; let n = 0;
-    for (const f in BR_HDR) { const j = hs.findIndex((h) => h && BR_HDR[f].includes(h)); if (j >= 0) { m[f] = j; n++; } }
+    for (const f in BR_HDR) { const j = f === 'nama_barang' ? hs.findIndex(isNamaBrg) : hs.findIndex((h) => h && BR_HDR[f].includes(h)); if (j >= 0) { m[f] = j; n++; } }
     if (n > top) { top = n; best = m; }
   }
+  if (best && best.nama_barang == null) for (let i = 0; i < Math.min(sr.length, 6); i++) { const j = (sr[i] || []).map(normH).findIndex(isNamaBrg); if (j >= 0) { best.nama_barang = j; break; } }
   const cols = { ...BR_DEF };
   if (best && best.nomor_pso != null && top >= 4) Object.assign(cols, best);
   return cols;
@@ -704,7 +706,16 @@ function compute(cab) {
 }
 
 // ---------- table helper
+// semua laporan diawali kolom No: bila kolom pertama bukan 'no', tambahkan dan beri nomor (baris total tidak diberi nomor)
+const isTotRow = (r) => !!(r.tot || r.gt || r.kelompok === 'Semua');
+function withNo(cols, data) {
+  if (cols.length && cols[0][0] === 'no') return [cols, data];
+  let n = 0;
+  return [[['no', 'No'], ...cols], data.map((r) => ({ ...r, no: isTotRow(r) ? '' : ++n }))];
+}
+function normReps(reps) { return reps.map((rep) => ({ ...rep, parts: rep.parts.map((p) => ({ ...p, blocks: p.blocks.map((b) => { const [cols, rows] = withNo(b.cols, b.rows); return { ...b, cols, rows }; }) })) })); }
 function table(cols, data, rowClass, onRow) {
+  [cols, data] = withNo(cols, data);
   const wrap = el('div', 'scroll'), t = el('table', 'tbl'), thead = el('thead'), htr = el('tr');
   cols.forEach(([, l]) => htr.appendChild(el('th', '', l)));
   thead.appendChild(htr); t.appendChild(thead);
@@ -1144,6 +1155,7 @@ async function doExport(fmt, scope, cab, sub) {
   const cabs = scope === 'all' ? CABS : [cab];
   let reps = cabs.map(reportOf).filter((r) => r.hasRows);
   if (scope === 'tab') reps = reps.map((r) => ({ ...r, parts: r.parts.filter((p) => p.key === sub) }));
+  reps = normReps(reps);
   if (!reps.length) { $('#warn').textContent = 'Belum ada baris PSO untuk diexport.'; return; }
   const what = scope === 'all' ? 'Semua_Cabang' : SHORT[cab.n].replace(/ /g, '_') + (scope === 'tab' ? '_' + SUBLABEL[sub].replace(/ /g, '_') : '');
   const base = 'Panjar_PSO_' + what + '_' + stamp();
@@ -1185,7 +1197,7 @@ $('#mclose').addEventListener('click', closeModal);
 function exportPopup(fmt) {
   const top = mstack[mstack.length - 1];
   if (!top || !top.parts) return;
-  const cab = top.cab, rep = { cab, per: perLabel(cab.n), parts: top.parts() };
+  const cab = top.cab, rep = normReps([{ cab, per: perLabel(cab.n), parts: top.parts() }])[0];
   const base = 'Panjar_PSO_' + SHORT[cab.n].replace(/ /g, '_') + '_' + top.title.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 60) + '_' + stamp();
   if (fmt === 'pdf') exportPdf([rep], base);
   else buildXlsx([rep], false).then((b) => download(b, base + '.xlsx')).catch((err) => { $('#warn').textContent = 'Export Excel gagal: ' + (err.message || err); });
