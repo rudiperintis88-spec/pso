@@ -369,7 +369,12 @@ function branchCols(sr) {
   }
   if (best && best.nama_barang == null) for (let i = 0; i < Math.min(sr.length, 6); i++) { const j = (sr[i] || []).map(normH).findIndex(isNamaBrg); if (j >= 0) { best.nama_barang = j; break; } }
   const cols = { ...BR_DEF };
-  if (best && best.nomor_pso != null && top >= 4) Object.assign(cols, best);
+  if (best && best.nomor_pso != null && top >= 4) {
+    Object.assign(cols, best);
+    // kolom NamaBrg disisipkan di antara kolom lama: kolom yang judulnya tidak dikenali ikut bergeser satu ke kanan
+    const k = best.nama_barang;
+    if (k != null && k < 16) for (const f in BR_DEF) if (best[f] == null && BR_DEF[f] >= k) cols[f] = BR_DEF[f] + 1;
+  }
   return cols;
 }
 function buildRows(tables) {
@@ -608,7 +613,7 @@ const sigAll = (rows, per) => {
   for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); h1 = (Math.imul(h1, 33) ^ c) | 0; h2 = (Math.imul(h2, 31) + c) | 0; }
   return s.length + '|' + h1 + '|' + h2;
 };
-const NAMA_COL = ['nama_barang', 'Nama Barang'];
+const NAMA_COL = ['nama_barang', 'NamaBrg'];
 function syncNamaCol(rows) {
   const want = rows.some((r) => r.nama_barang);
   for (const arr of [BASE, DB_COLS, ITEM_COLS, PJ_COLS, SEC_COLS]) {
