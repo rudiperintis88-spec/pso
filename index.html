@@ -397,7 +397,7 @@ function buildRows(tables) {
         no_polisi: txt(g(c, 'no_polisi')), status: txt(g(c, 'status')), qty: num(g(c, 'qty')), jlh: num(g(c, 'jlh')), panjar: num(g(c, 'panjar')), tgl_pjr: toIso(g(c, 'tgl_pjr')),
         ket: txt(g(c, 'ket')), wo_pso: txt(g(c, 'wo_pso')), no_penitipan: txt(g(c, 'no_penitipan')), tgl_dibukukan: null, wo: null, sa: txt(g(c, 'sa')), divisi: txt(g(c, 'divisi')),
         tgl_pjr0: toIso(g(c, 'tgl_pjr')), wo_pso0: txt(g(c, 'wo_pso')), no_penitipan0: txt(g(c, 'no_penitipan')),
-        setoran_bank: null, keterangan: null, pelunasan_lpk: null, keterangan_2: null,
+        setoran_bank: null, keterangan: null, pelunasan_lpk: null, keterangan_2: null, ada_ket: false,
       });
     }
   }
@@ -427,7 +427,7 @@ function buildRows(tables) {
   for (const r of rows) { if (!byP.has(r.nomor_pso)) byP.set(r.nomor_pso, []); byP.get(r.nomor_pso).push(r); }
   for (const [p, rs] of byP) {
     const k = kt[p]; if (!k) continue;
-    rs.forEach((r) => { r.keterangan = k.ket; r.pelunasan_lpk = k.lpk; r.keterangan_2 = k.ket2; });
+    rs.forEach((r) => { r.keterangan = k.ket; r.pelunasan_lpk = k.lpk; r.keterangan_2 = k.ket2; r.ada_ket = true; });
     if (k.set == null) continue;
     const tot = rs.reduce((a, r) => a + (r.panjar || 0), 0);
     if (tot > 0) {
@@ -661,12 +661,13 @@ function compute(cab) {
     let o = by.get(r.nomor_pso);
     if (!o) { o = { pso: r.nomor_pso, cust: r.nama_customer, panjar: 0, jlh: 0, pen: null, ket: '', lpk: null, ket2: '', set: 0, hasSet: false }; by.set(r.nomor_pso, o); list.push(o); }
     o.panjar += r.panjar || 0; o.jlh += r.jlh || 0; o.pen = o.pen || r.no_penitipan; o.hasPjr = o.hasPjr || !!r.tgl_pjr || !!r.no_penitipan; o.hasTgl = o.hasTgl || !!r.tgl_pjr;
+    o.inKet = o.inKet || (r.ada_ket != null ? r.ada_ket : (r.setoran_bank != null || r.keterangan != null || r.pelunasan_lpk != null || r.keterangan_2 != null));
     o.ket = o.ket || r.keterangan || ''; o.lpk = o.lpk || r.pelunasan_lpk; o.ket2 = o.ket2 || r.keterangan_2 || '';
     if (r.setoran_bank != null) { o.set += r.setoran_bank; o.hasSet = true; }
   }
   const out = { list, rows: [], sec: { clear: [], tanpa: [], jalan: [] }, A: [], B: [], C: [], tot: { qty: 0, jlh: 0, panjar: 0, setoran: 0 } };
   for (const o of list) {
-    o.sec = /berjalan/i.test(o.ket) ? 'jalan' : o.ket ? 'clear' : (o.panjar > 0 && !o.hasTgl) ? 'jalan' : !o.hasPjr ? 'tanpa' : '';
+    o.sec = /berjalan/i.test(o.ket) ? 'jalan' : o.ket ? 'clear' : (!o.inKet && o.panjar > 0 && !o.hasTgl && !(o.set > 0)) ? 'jalan' : !o.hasPjr ? 'tanpa' : '';
     o.cat = o.sec === 'jalan' ? 'B' : o.sec !== 'clear' ? '' : /^batal/i.test(o.ket) ? 'A' : (/^(lunas|pelunasan|kekurangan|lebih)/i.test(o.ket) || o.lpk) ? 'C' : '';
     o.amt = o.cat === 'C' ? o.panjar - o.set : o.panjar;
   }
@@ -932,7 +933,7 @@ function render() {
     ringkasan: () => viewRingkasan(body, cab, rpt), panjar: () => viewPanjar(body, cab, rpt),
     clear: () => viewSec(body, cab, rpt, 'clear', 'Clear', 'PSO yang kolom Keterangan-nya sudah terisi di sheet Keterangan dianggap clear, kecuali yang Keterangan-nya berisi masih berjalan.'),
     tanpa: () => viewSec(body, cab, rpt, 'tanpa', 'Tanpa panjar', 'PSO yang TglPjr dan No Penitipan-nya sama-sama kosong, dan Keterangan-nya kosong.'),
-    jalan: () => viewSec(body, cab, rpt, 'jalan', 'Masih berjalan', 'PSO yang Keterangan-nya di sheet Keterangan berisi masih berjalan, atau yang kolom Panjar-nya ada nominal tetapi TglPjr-nya kosong.'),
+    jalan: () => viewSec(body, cab, rpt, 'jalan', 'Masih berjalan', 'PSO yang Keterangan-nya di sheet Keterangan berisi masih berjalan; atau PSO yang belum ada di sheet Keterangan, Panjar-nya ada nominal, TglPjr-nya kosong, dan belum ada setoran bank.'),
     catatan: () => viewCatatan(body, cab, rpt), db: () => viewDb(body, cab),
   };
   V[sub]();
