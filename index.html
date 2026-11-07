@@ -612,9 +612,10 @@ const syncText = () => {
   const n = Object.keys(dirty).length, tail = n ? ' (' + n + ' isian menunggu dikirim)' : '';
   if (!REKON_URL) return 'Sinkronisasi belum disambungkan: isian hanya tersimpan di browser ini.';
   if (S.sync === 'ok') return 'Isian tersinkron ke server dan sama di semua perangkat.' + tail;
-  if (S.sync === 'err') return 'Belum bisa terhubung ke server. Isian aman di browser ini dan dikirim ulang otomatis.' + tail;
+  if (S.sync === 'err') return 'Belum bisa terhubung ke server (' + (S.syncWhy || 'tidak diketahui') + '; alamat …' + REKON_URL.slice(-16) + '). Isian aman di browser ini dan dikirim ulang otomatis.' + tail;
   return 'Menyambungkan ke server…' + tail;
 };
+const whyOf = (e) => { const m = e && e.message ? e.message : 'gagal'; if (m === 'timeout') return 'tidak ada jawaban valid dari server; biasanya akses deployment belum "Siapa saja" atau alamat salah'; if (m === 'net') return 'alamat tidak bisa dijangkau'; return m; };
 const paintSync = () => { const e = $('#rekSync'); if (e) e.textContent = syncText(); };
 const rerenderSafe = () => { const a = document.activeElement; if (a && a.classList && a.classList.contains('numin')) return; if (S.D) render(); };
 const adoptRemote = (k, c) => { if (c.v == null) delete stored[k]; else stored[k] = c.v; metaInfo[k] = { by: c.by || '', at: c.at }; };
@@ -644,10 +645,10 @@ async function flushRekon() {
         adoptRemote(k, res.cur); delete dirty[k]; changed = true;
         S.warn = 'Isian ' + k.split('|')[0] + ' sudah diubah oleh ' + (res.cur.by || 'pengguna lain') + ' (' + fmtAt(res.cur.at) + '). Angka terbaru dari server dipakai, silakan cek lalu isi lagi bila perlu.';
         const w = $('#warn'); if (w) w.textContent = S.warn;
-      } else throw new Error((res && res.error) || 'gagal');
+      } else throw new Error('server: ' + ((res && res.error) || 'jawaban kosong'));
     }
     S.sync = 'ok';
-  } catch (e) { S.sync = 'err'; ok = false; }
+  } catch (e) { S.sync = 'err'; S.syncWhy = whyOf(e); ok = false; }
   rkBusy = false; saveLS(); paintSync();
   if (changed) rerenderSafe();
   if (ok && Object.keys(dirty).length) flushRekon(); // ada isian baru saat sedang mengirim
@@ -657,7 +658,7 @@ async function pullRekon() {
   if (!REKON_URL) { paintSync(); return; }
   try {
     const res = await rekonCall({ action: 'get' });
-    if (!res || !res.ok) throw new Error('x');
+    if (!res || !res.ok) throw new Error('server: ' + ((res && res.error) || 'jawaban kosong'));
     const data = res.data || {}; let changed = false;
     for (const k of Object.keys(data)) {
       if (dirty[k]) continue;
@@ -668,7 +669,7 @@ async function pullRekon() {
     S.sync = 'ok'; saveLS(); paintSync();
     if (await flushRekon()) changed = true;
     if (changed) rerenderSafe();
-  } catch (e) { S.sync = 'err'; paintSync(); }
+  } catch (e) { S.sync = 'err'; S.syncWhy = whyOf(e); paintSync(); }
 }
 const setMeta = (cab, key, v) => {
   const k = cab + '|' + key;
