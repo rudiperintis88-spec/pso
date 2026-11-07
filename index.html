@@ -835,7 +835,7 @@ function rekCard(cab, rpt) {
   const tb = el('tbody');
   for (const r of rpt.rek) {
     const tr = el('tr', r.gt ? 'gt' : ''), a = el('td', 'wrap', r.u), b = el('td', 'num');
-    if (r.edit) b.appendChild(inp('text', r.auto != null ? (r.set ? idf.format(r.v) : '') : (r.v ? idf.format(r.v) : ''), (val) => { setMeta(cab.n, r.edit, val.trim() === '' ? undefined : num(val)); render(); }, r.auto != null ? idf.format(r.auto) : '0', 'cell numin'));
+    if (r.edit) b.appendChild(inp('text', r.auto != null ? (r.set ? idf.format(r.v) : '') : (r.v ? idf.format(r.v) : ''), (val, i) => { _rekIdx = Array.from(document.querySelectorAll('#root .numin')).indexOf(i); setMeta(cab.n, r.edit, val.trim() === '' ? undefined : num(val)); render(); }, r.auto != null ? idf.format(r.auto) : '0', 'cell numin'));
     else b.textContent = r.v == null ? '—' : idf.format(r.v);
     tr.append(a, b); tb.appendChild(tr);
   }
@@ -914,7 +914,27 @@ function tabs(items, active, onPick, cls) {
   items.forEach(([k, label]) => { const b = el('button', k === active ? 'on' : '', label); b.type = 'button'; b.addEventListener('click', () => onPick(k)); bar.appendChild(b); });
   return bar;
 }
+// render() membangun ulang seluruh halaman; wrapper ini menjaga posisi gulir (halaman dan tabel) tetap sama,
+// dan setelah mengisi kotak rekonsiliasi (Tab / Enter) kursor pindah ke kotak berikutnya
+let _rekIdx = null, _nav = null;
+document.addEventListener('keydown', (e) => { if (e.key === 'Tab' || e.key === 'Enter') _nav = { d: e.key === 'Tab' && e.shiftKey ? -1 : 1, t: Date.now() }; }, true);
 function render() {
+  const sx = window.scrollX, sy = window.scrollY;
+  const inner = Array.from(document.querySelectorAll('#root .scroll')).map((e) => [e.scrollLeft, e.scrollTop]);
+  renderCore();
+  window.scrollTo(sx, sy);
+  document.querySelectorAll('#root .scroll').forEach((e, i) => { if (inner[i]) { e.scrollLeft = inner[i][0]; e.scrollTop = inner[i][1]; } });
+  if (_rekIdx != null) {
+    const nav = _nav && Date.now() - _nav.t < 800 ? _nav : null, idx = _rekIdx;
+    _rekIdx = null; _nav = null;
+    if (nav) {
+      const list = document.querySelectorAll('#root .numin'), f = list[Math.max(0, Math.min(list.length - 1, idx + nav.d))];
+      if (f) { try { f.focus({ preventScroll: true }); f.select(); } catch (e) { /* ignore */ } }
+    }
+  }
+  window.scrollTo(sx, sy);
+}
+function renderCore() {
   const root = $('#root'); root.replaceChildren();
   const visible = CABS.filter((c) => c.always || S.rows.some((r) => r.cabang === c.n));
   if (!visible.some((c) => c.k === S.cab)) S.cab = visible[0].k;
@@ -941,7 +961,7 @@ function render() {
   };
   V[sub]();
   paintStatus(); $('#warn').textContent = S.warn;
-  document.querySelectorAll('.tabs button.on').forEach((x) => { if (x.scrollIntoView) x.scrollIntoView({ block: 'nearest', inline: 'center' }); });
+  document.querySelectorAll('.tabs button.on').forEach((x) => { const pr = x.parentElement; if (pr && pr.scrollWidth > pr.clientWidth) pr.scrollLeft = x.offsetLeft - (pr.clientWidth - x.offsetWidth) / 2; });
 }
 
 // ---------- loading, refresh and notes file
