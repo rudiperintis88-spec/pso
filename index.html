@@ -319,8 +319,11 @@ const toIso = (v) => {
   if (typeof v === 'number') return serialIso(v);
   const s = String(v).trim();
   if (/^\d{5}(\.\d+)?$/.test(s)) return serialIso(Number(s));
-  let m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s);
+  let m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?!\d)/.exec(s);
   if (m) return m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
+  // tahun 2 digit (mis. TglPjr 02/01/20) dianggap 20xx
+  m = /^(\d{1,2})\/(\d{1,2})\/(\d{2})(?!\d)/.exec(s);
+  if (m) return '20' + m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
   m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
   return m ? m[0] : null;
 };
