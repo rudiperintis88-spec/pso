@@ -599,15 +599,88 @@ async function fetchLive() {
 }
 
 
-// ---------- values typed in the browser (only the slip setoran figures of the reconciliation)
-const AKEY = 'pso_auto_v1', MKEY = 'pso_meta_v2';
-let stored = {};
-try { stored = JSON.parse(localStorage.getItem(MKEY)) || {}; } catch (e) { /* storage blocked */ }
+// ---------- isian rekonsiliasi: disimpan di browser dan disinkronkan ke sheet bersama (Apps Script Code_Rekon_PSO.gs)
+const AKEY = 'pso_auto_v1', MKEY = 'pso_meta_v2', IKEY = 'pso_metainfo_v1', DKEY = 'pso_dirty_v1';
+// URL Web App dari Code_Rekon_PSO.gs (berakhiran /exec). Kosong = isian hanya tersimpan di browser ini.
+const REKON_URL = 'https://script.google.com/macros/s/AKfycbxF_cyaJNO_sKC9MOos84yQIyM71KSjluoYb_hu3Pwcu1rlYrWEhvHg5ZHtM3dne9FcqQ/exec';
+const readLS = (k) => { try { return JSON.parse(localStorage.getItem(k)) || {}; } catch (e) { return {}; } };
+let stored = readLS(MKEY), metaInfo = readLS(IKEY), dirty = readLS(DKEY), who = '';
+const saveLS = () => { try { localStorage.setItem(MKEY, JSON.stringify(stored)); localStorage.setItem(IKEY, JSON.stringify(metaInfo)); localStorage.setItem(DKEY, JSON.stringify(dirty)); return true; } catch (e) { return false; } };
 const metaOf = (cab, key) => stored[cab + '|' + key];
-const setMeta = (cab, key, v) => { stored[cab + '|' + key] = v; try { localStorage.setItem(MKEY, JSON.stringify(stored)); S.warn = ''; } catch (e) { S.warn = 'Isian slip setoran belum tersimpan di browser ini.'; } const w = $('#warn'); if (w) w.textContent = S.warn; };
+const fmtAt = (at) => { try { return new Date(Number(at)).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
+const syncText = () => {
+  const n = Object.keys(dirty).length, tail = n ? ' (' + n + ' isian menunggu dikirim)' : '';
+  if (!REKON_URL) return 'Sinkronisasi belum disambungkan: isian hanya tersimpan di browser ini.';
+  if (S.sync === 'ok') return 'Isian tersinkron ke server dan sama di semua perangkat.' + tail;
+  if (S.sync === 'err') return 'Belum bisa terhubung ke server. Isian aman di browser ini dan dikirim ulang otomatis.' + tail;
+  return 'Menyambungkan ke server…' + tail;
+};
+const paintSync = () => { const e = $('#rekSync'); if (e) e.textContent = syncText(); };
+const rerenderSafe = () => { const a = document.activeElement; if (a && a.classList && a.classList.contains('numin')) return; if (S.D) render(); };
+const adoptRemote = (k, c) => { if (c.v == null) delete stored[k]; else stored[k] = c.v; metaInfo[k] = { by: c.by || '', at: c.at }; };
+function rekonCall(params) { // JSONP ke Apps Script (tidak terkena batasan CORS)
+  return new Promise((resolve, reject) => {
+    if (!REKON_URL) { reject(new Error('off')); return; }
+    const cb = '_rk' + Date.now() + Math.floor(Math.random() * 1e6), sc = document.createElement('script');
+    let done = false, t = null;
+    const fin = (f, v) => { if (done) return; done = true; clearTimeout(t); try { delete window[cb]; } catch (e) { window[cb] = undefined; } sc.remove(); f(v); };
+    window[cb] = (d) => fin(resolve, d);
+    sc.onerror = () => fin(reject, new Error('net'));
+    t = setTimeout(() => fin(reject, new Error('timeout')), 15000);
+    sc.src = REKON_URL + '?' + new URLSearchParams(Object.assign({}, params, { callback: cb })).toString();
+    document.head.appendChild(sc);
+  });
+}
+let rkBusy = false;
+async function flushRekon() {
+  if (!REKON_URL) { paintSync(); return false; }
+  if (rkBusy) return false;
+  rkBusy = true; let changed = false, ok = true;
+  try {
+    for (const k of Object.keys(dirty)) {
+      const sent = stored[k], res = await rekonCall({ action: 'set', key: k, v: sent === undefined ? '' : String(sent), by: who, base: String((metaInfo[k] && metaInfo[k].at) || '') });
+      if (res && res.ok) { metaInfo[k] = { by: who, at: res.at }; if (stored[k] === sent) delete dirty[k]; }
+      else if (res && res.conflict) {
+        adoptRemote(k, res.cur); delete dirty[k]; changed = true;
+        S.warn = 'Isian ' + k.split('|')[0] + ' sudah diubah oleh ' + (res.cur.by || 'pengguna lain') + ' (' + fmtAt(res.cur.at) + '). Angka terbaru dari server dipakai, silakan cek lalu isi lagi bila perlu.';
+        const w = $('#warn'); if (w) w.textContent = S.warn;
+      } else throw new Error((res && res.error) || 'gagal');
+    }
+    S.sync = 'ok';
+  } catch (e) { S.sync = 'err'; ok = false; }
+  rkBusy = false; saveLS(); paintSync();
+  if (changed) rerenderSafe();
+  if (ok && Object.keys(dirty).length) flushRekon(); // ada isian baru saat sedang mengirim
+  return changed;
+}
+async function pullRekon() {
+  if (!REKON_URL) { paintSync(); return; }
+  try {
+    const res = await rekonCall({ action: 'get' });
+    if (!res || !res.ok) throw new Error('x');
+    const data = res.data || {}; let changed = false;
+    for (const k of Object.keys(data)) {
+      if (dirty[k]) continue;
+      const sv = data[k], nv = sv.v == null ? undefined : sv.v;
+      if (stored[k] !== nv || !metaInfo[k] || String(metaInfo[k].at) !== String(sv.at)) { adoptRemote(k, sv); changed = true; }
+    }
+    for (const k of Object.keys(stored)) if (!(k in data) && !dirty[k]) dirty[k] = 1; // isian lama di browser ini ikut dikirim sekali
+    S.sync = 'ok'; saveLS(); paintSync();
+    if (await flushRekon()) changed = true;
+    if (changed) rerenderSafe();
+  } catch (e) { S.sync = 'err'; paintSync(); }
+}
+const setMeta = (cab, key, v) => {
+  const k = cab + '|' + key;
+  if (v === undefined) delete stored[k]; else stored[k] = v;
+  dirty[k] = 1;
+  S.warn = saveLS() ? '' : 'Isian slip setoran belum tersimpan di browser ini.';
+  const w = $('#warn'); if (w) w.textContent = S.warn;
+  flushRekon();
+};
 
 // ---------- state
-const S = { rows: [], D: null, cab: 'adam', sub: {}, pj: {}, sec: {}, warn: '', perText: {}, sig: '', mode: 'snap', at: null, err: '', busy: false, fileName: '', snapAt: '', per: '' };
+const S = { rows: [], D: null, cab: 'adam', sub: {}, pj: {}, sec: {}, warn: '', sync: '', perText: {}, sig: '', mode: 'snap', at: null, err: '', busy: false, fileName: '', snapAt: '', per: '' };
 const sig = (rows) => rows.length + '|' + rows.reduce((a, r) => a + (r.jlh || 0) + (r.panjar || 0) * 7 + (r.tgl_dibukukan ? 1 : 0) + (r.no_penitipan ? 3 : 0) + (r.status === 'TWC' ? 5 : 0) + (r.setoran_bank || 0) * 11, 0) + '|' + rows.reduce((a, r) => a + (r.ket ? r.ket.length : 0) + (r.keterangan ? r.keterangan.length * 13 : 0) + (r.keterangan_2 ? r.keterangan_2.length * 17 : 0) + (r.pelunasan_lpk ? 19 : 0) + (r.selisih_sheet || 0), 0);
 const sigAll = (rows, per) => {
   // tanda pengenal dari SELURUH isi data (bukan hanya beberapa kolom), supaya perubahan apa pun di spreadsheet pasti terdeteksi
@@ -829,13 +902,15 @@ const hit = (w, vals) => !w || vals.some((v) => v && String(v).toLowerCase().inc
 
 function rekCard(cab, rpt) {
   const card = el('div', 'card');
-  card.append(el('h3', '', 'Rekonsiliasi panjar dan setoran'), el('p', 'muted', 'Sama dengan blok total di bawah sheet Panjar PSO. Baris dengan kotak isian bisa Bapak isi sendiri. Pembatalan panjar PSO dan Panjar masih berjalan memakai total catatan A dan B bila kotaknya dikosongkan, dan memakai angka yang Bapak ketik bila diisi. Nilainya bisa Bapak ubah dan tersimpan di browser ini.'));
+  card.append(el('h3', '', 'Rekonsiliasi panjar dan setoran'), el('p', 'muted', 'Sama dengan blok total di bawah sheet Panjar PSO. Baris dengan kotak isian bisa Bapak isi sendiri. Pembatalan panjar PSO dan Panjar masih berjalan memakai total catatan A dan B bila kotaknya dikosongkan, dan memakai angka yang Bapak ketik bila diisi. Nilainya bisa Bapak ubah.'));
+  const rs = el('p', 'muted', syncText()); rs.id = 'rekSync'; card.appendChild(rs);
   const wrap = el('div', 'scroll'), t = el('table', 'tbl'), thead = el('thead'), htr = el('tr');
   htr.append(el('th', '', 'Uraian'), el('th', '', 'Jumlah (Rp)')); thead.appendChild(htr); t.appendChild(thead);
   const tb = el('tbody');
   for (const r of rpt.rek) {
     const tr = el('tr', r.gt ? 'gt' : ''), a = el('td', 'wrap', r.u), b = el('td', 'num');
     if (r.edit) b.appendChild(inp('text', r.auto != null ? (r.set ? idf.format(r.v) : '') : (r.v ? idf.format(r.v) : ''), (val, i) => { _rekIdx = Array.from(document.querySelectorAll('#root .numin')).indexOf(i); setMeta(cab.n, r.edit, val.trim() === '' ? undefined : num(val)); render(); }, r.auto != null ? idf.format(r.auto) : '0', 'cell numin'));
+    if (r.edit) { const mi = metaInfo[cab.n + '|' + r.edit]; if (mi && mi.at) { const d = el('div', 'muted', 'oleh ' + (mi.by || '-') + ' · ' + fmtAt(mi.at)); d.style.fontSize = '11px'; b.appendChild(d); } }
     else b.textContent = r.v == null ? '—' : idf.format(r.v);
     tr.append(a, b); tb.appendChild(tr);
   }
@@ -975,6 +1050,7 @@ let loading = false, again = false, lastLoad = 0;
 async function loadLive(force) {
   if (loading) { if (force) again = true; return; } // klik Refresh saat masih memuat: diulang otomatis setelah selesai
   loading = true; lastLoad = Date.now(); S.busy = true; paintStatus();
+  pullRekon();
   try {
     const tb = await fetchLive();
     S.sheetUsed = {}; for (const k of BRANCH_SHEETS) if (tb.__used && tb.__used[k]) S.sheetUsed[CAB_OF_SHEET[k]] = tb.__used[k];
@@ -1373,6 +1449,7 @@ gateForm.addEventListener('submit', async (ev) => {
   const btn = gateForm.querySelector('button[type="submit"]');
   btn.disabled = true; gateErr.textContent = 'Memeriksa perangkat…';
   const namaTyped = gateName.value.trim(), pwTyped = gateInput.value;
+  who = namaTyped;
   const _devChk = await _cekPerangkat(namaTyped, CABANG_NAME, APPS_SCRIPT_URL);
   if (_devChk.status !== 'approved') {
     gateErr.textContent = _devChk.status==='pending' ? 'Perangkat ini belum disetujui admin. Permintaan sudah dikirim, coba Masuk lagi setelah disetujui.' : (_devChk.status==='rejected' ? 'Perangkat ini ditolak admin.' : 'Tidak bisa menghubungi server. Coba lagi.');
