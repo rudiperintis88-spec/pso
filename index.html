@@ -602,7 +602,7 @@ async function fetchLive() {
 // ---------- isian rekonsiliasi: disimpan di browser dan disinkronkan ke sheet bersama (Apps Script Code_Rekon_PSO.gs)
 const AKEY = 'pso_auto_v1', MKEY = 'pso_meta_v2', IKEY = 'pso_metainfo_v1', DKEY = 'pso_dirty_v1';
 // URL Web App dari Code_Rekon_PSO.gs (berakhiran /exec). Kosong = isian hanya tersimpan di browser ini.
-const REKON_URL = 'https://script.google.com/macros/s/AKfycbx7ohYvQy-a5UEWSAAlurGcT8kF5ejJkhLTh662Mo30UWcoO_xhYzpUtdsCwx2nr4lNvQ/exec';
+const REKON_URL = 'https://script.google.com/macros/s/AKfycbzGnXW0bZV4FpHzrDv0wEL6YwNEfWvp1FIuXJotIeFQHKRB7dWN-QgrrMKSLEKNyP3gLw/exec';
 const readLS = (k) => { try { return JSON.parse(localStorage.getItem(k)) || {}; } catch (e) { return {}; } };
 let stored = readLS(MKEY), metaInfo = readLS(IKEY), dirty = readLS(DKEY), who = '';
 const saveLS = () => { try { localStorage.setItem(MKEY, JSON.stringify(stored)); localStorage.setItem(IKEY, JSON.stringify(metaInfo)); localStorage.setItem(DKEY, JSON.stringify(dirty)); return true; } catch (e) { return false; } };
