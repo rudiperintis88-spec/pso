@@ -660,13 +660,13 @@ function compute(cab) {
     rows.push(r);
     let o = by.get(r.nomor_pso);
     if (!o) { o = { pso: r.nomor_pso, cust: r.nama_customer, panjar: 0, jlh: 0, pen: null, ket: '', lpk: null, ket2: '', set: 0, hasSet: false }; by.set(r.nomor_pso, o); list.push(o); }
-    o.panjar += r.panjar || 0; o.jlh += r.jlh || 0; o.pen = o.pen || r.no_penitipan; o.hasPjr = o.hasPjr || !!r.tgl_pjr || !!r.no_penitipan;
+    o.panjar += r.panjar || 0; o.jlh += r.jlh || 0; o.pen = o.pen || r.no_penitipan; o.hasPjr = o.hasPjr || !!r.tgl_pjr || !!r.no_penitipan; o.hasTgl = o.hasTgl || !!r.tgl_pjr;
     o.ket = o.ket || r.keterangan || ''; o.lpk = o.lpk || r.pelunasan_lpk; o.ket2 = o.ket2 || r.keterangan_2 || '';
     if (r.setoran_bank != null) { o.set += r.setoran_bank; o.hasSet = true; }
   }
   const out = { list, rows: [], sec: { clear: [], tanpa: [], jalan: [] }, A: [], B: [], C: [], tot: { qty: 0, jlh: 0, panjar: 0, setoran: 0 } };
   for (const o of list) {
-    o.sec = /berjalan/i.test(o.ket) ? 'jalan' : o.ket ? 'clear' : !o.hasPjr ? 'tanpa' : '';
+    o.sec = /berjalan/i.test(o.ket) ? 'jalan' : o.ket ? 'clear' : (o.panjar > 0 && !o.hasTgl) ? 'jalan' : !o.hasPjr ? 'tanpa' : '';
     o.cat = o.sec === 'jalan' ? 'B' : o.sec !== 'clear' ? '' : /^batal/i.test(o.ket) ? 'A' : (/^(lunas|pelunasan|kekurangan|lebih)/i.test(o.ket) || o.lpk) ? 'C' : '';
     o.amt = o.cat === 'C' ? o.panjar - o.set : o.panjar;
   }
@@ -932,7 +932,7 @@ function render() {
     ringkasan: () => viewRingkasan(body, cab, rpt), panjar: () => viewPanjar(body, cab, rpt),
     clear: () => viewSec(body, cab, rpt, 'clear', 'Clear', 'PSO yang kolom Keterangan-nya sudah terisi di sheet Keterangan dianggap clear, kecuali yang Keterangan-nya berisi masih berjalan.'),
     tanpa: () => viewSec(body, cab, rpt, 'tanpa', 'Tanpa panjar', 'PSO yang TglPjr dan No Penitipan-nya sama-sama kosong, dan Keterangan-nya kosong.'),
-    jalan: () => viewSec(body, cab, rpt, 'jalan', 'Masih berjalan', 'PSO yang Keterangan-nya di sheet Keterangan berisi masih berjalan.'),
+    jalan: () => viewSec(body, cab, rpt, 'jalan', 'Masih berjalan', 'PSO yang Keterangan-nya di sheet Keterangan berisi masih berjalan, atau yang kolom Panjar-nya ada nominal tetapi TglPjr-nya kosong.'),
     catatan: () => viewCatatan(body, cab, rpt), db: () => viewDb(body, cab),
   };
   V[sub]();
