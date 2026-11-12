@@ -1084,13 +1084,13 @@ function openLebih(cab) {
   const hRows = rpt.lebih == null ? [{ u: 'Slip setoran belum diisi di tabel Rekonsiliasi, jadi Lebih setoran belum bisa dihitung.', v: null }]
     : [{ u: 'Grand total (Total panjar − Pembatalan A − Panjar masih berjalan B dan C)', v: rpt.grand }, ...hit.map((r) => ({ u: 'Dikurangi ' + r.u, v: r.v })), { u: 'Lebih setoran', v: rpt.lebih, gt: true }];
   const cekC = () => buktiBlocks(cab, rpt).filter((b) => b.t.indexOf('5x. ') === 0);
-  const beda = rpt.lebih == null ? null : Math.abs(rpt.lebih) - rpt.sum.D, kebalik = false;
+  const beda = rpt.lebih == null ? null : Math.abs(rpt.lebih) - Math.abs(rpt.sum.D), kebalik = false;
   pushModal('Lebih setoran · ' + cab.n, (box) => {
-    box.append(el('h3', 'mh3', tH), table(REK2, hRows, (r) => (r.gt ? 'gt' : '')).wrap, el('h3', 'mh3', 'D. Lebih bayar'),
-      el('p', 'muted', 'Catatan D otomatis (Lebih bayar). Pencocokan dengan sheet Data (kolom Penjelasan Lebih Setoran) ada di tabel Cek di bawah. Klik baris untuk melihat detail PSO.' + (beda == null ? '' : ' Lebih setoran ' + money(rpt.lebih) + ' (nilai mutlak) dikurangi Catatan D ' + money(rpt.sum.D) + ' = selisih ' + money(beda) + '.' + (kebalik ? ' Nilainya sama tetapi tandanya terbalik.' : ''))),
+    box.append(el('h3', 'mh3', tH), table(REK2, hRows, (r) => (r.gt ? 'gt' : '')).wrap, el('h3', 'mh3', 'D. Lebih/Kurang Bayar'),
+      el('p', 'muted', 'Catatan D otomatis (Lebih/Kurang Bayar). Pencocokan dengan sheet Data (kolom Penjelasan Lebih Setoran) ada di tabel Cek di bawah. Klik baris untuk melihat detail PSO.' + (beda == null ? '' : ' Lebih setoran ' + money(rpt.lebih) + ' (nilai mutlak) dikurangi Catatan D ' + money(Math.abs(rpt.sum.D)) + ' (nilai mutlak) = selisih ' + money(beda) + '.' + (kebalik ? ' Nilainya sama tetapi tandanya terbalik.' : ''))),
       table(CAT_COLS, dRows, (r) => (r.tot ? 'tot' : ''), (r) => { if (r.pso) openPso(cab, r.pso); }).wrap);
     for (const b of cekC()) box.append(el('h3', 'mh3', 'Cek: Catatan C otomatis vs Penjelasan Lebih Setoran (sheet Data)'), el('p', 'muted', b.note), table(b.cols, b.rows, (r) => (r.tot ? 'tot' : ''), (r) => { if (r.pso) openPso(cab, r.pso); }).wrap);
-  }, () => [{ name: 'Lebih setoran', blocks: [{ t: tH, cols: REK2, rows: hRows }, { t: 'D. Lebih bayar', cols: CAT_COLS, rows: dRows }, ...cekC().map((b) => ({ t: 'Cek: Catatan C vs Penjelasan Lebih Setoran — ' + b.note, cols: b.cols, rows: b.rows }))] }], cab);
+  }, () => [{ name: 'Lebih setoran', blocks: [{ t: tH, cols: REK2, rows: hRows }, { t: 'D. Lebih/Kurang Bayar', cols: CAT_COLS, rows: dRows }, ...cekC().map((b) => ({ t: 'Cek: Catatan C vs Penjelasan Lebih Setoran — ' + b.note, cols: b.cols, rows: b.rows }))] }], cab);
 }
 const openBerj = (cab) => {
   const rpt = compute(cab.n), bR = catRowsOf(rpt, 'B'), cR = catRowsOf(rpt, 'C');
@@ -1139,7 +1139,7 @@ function buktiBlocks(cab, rpt) {
   // 5 Lebih setoran
   const tE = sumOf(dE, 'jumlah'), hit = rpt.rek.filter((r) => /^Grand total slip|^Laporan Penitipan/.test(r.u) && r.v);
   const rE = rpt.lebih == null ? [{ u: 'Slip setoran belum diisi di tabel Rekonsiliasi, jadi Lebih setoran belum bisa dihitung.', v: null }] : [{ u: 'Grand total', v: rpt.grand }, ...hit.map((r) => ({ u: 'Dikurangi ' + r.u, v: r.v })), { u: 'Lebih setoran (kartu)', v: rpt.lebih, tot: true }];
-  out.push({ t: '5. Lebih setoran', note: rpt.lebih == null ? 'Belum bisa dihitung.' : 'Kartu ' + money(rpt.lebih) + '. ' + (dE.length ? cekTxt('Kartu (nilai mutlak) vs Catatan D', Math.abs(rpt.lebih), rpt.sum.D) + (false ? '' : '') : 'Belum ada Penjelasan Lebih Setoran untuk cabang ini di sheet Data.'), cols: REK2, rows: rE });
+  out.push({ t: '5. Lebih setoran', note: rpt.lebih == null ? 'Belum bisa dihitung.' : 'Kartu ' + money(rpt.lebih) + '. ' + (dE.length ? cekTxt('Kartu (nilai mutlak) vs Catatan D', Math.abs(rpt.lebih), Math.abs(rpt.sum.D)) + (false ? '' : '') : 'Belum ada Penjelasan Lebih Setoran untuk cabang ini di sheet Data.'), cols: REK2, rows: rE });
   const c5 = cmp(rpt.D, dE, 'Catatan D', 'Penjelasan Lebih Setoran');
   out.push({ t: '5x. Cek C', note: 'Catatan D otomatis ' + money(rpt.sum.D) + ' vs Penjelasan Lebih Setoran ' + money(tE) + '. ' + (dE.length ? '' : 'Belum ada Penjelasan Lebih Setoran untuk cabang ini di sheet Data. ') + (c5.tanpa ? c5.tanpa + ' baris sheet Data tanpa No PSO tidak ikut dicocokkan.' : ''), cols: CMPC('Catatan D', 'Penjelasan Lebih Setoran'), rows: c5.rows });
   // 6 Selisih
@@ -1187,7 +1187,7 @@ function openBukti(cab, nos, title) {
 }
 function viewCatatan(box, cab, rpt) {
   const grid = el('div', 'grid');
-  [['A', 'A. Pembatalan', 'PSO yang dibatalkan beserta panjarnya. ' + DATANOTE.A, true], ['B', 'B. Panjar masih berjalan', 'PSO yang panjarnya masih berjalan. ' + DATANOTE.B, false], ['C', 'C. Kekurangan panjar dan sudah lunas tanpa panjar', 'Penyebab lebih setoran. ' + DATANOTE.C, false], ['D', 'D. Lebih bayar', 'PSO yang Keterangan-nya Lebih Bayar, Kelebihan Bayar, Kurang Bayar, Kelebihan Transfer Tambahan Jasa, Jasa Pasang atau Jasa Pemasangan; nominal = setoran dikurangi panjar. Dipisah dari Catatan C.', false]].forEach(([k, t, n, wide]) => {
+  [['A', 'A. Pembatalan', 'PSO yang dibatalkan beserta panjarnya. ' + DATANOTE.A, true], ['B', 'B. Panjar masih berjalan', 'PSO yang panjarnya masih berjalan. ' + DATANOTE.B, false], ['C', 'C. Kekurangan panjar dan sudah lunas tanpa panjar', 'Penyebab lebih setoran. ' + DATANOTE.C, false], ['D', 'D. Lebih/Kurang Bayar', 'PSO yang Keterangan-nya Lebih Bayar, Kelebihan Bayar, Kurang Bayar, Kelebihan Transfer Tambahan Jasa, Jasa Pasang atau Jasa Pemasangan; nominal = setoran dikurangi panjar. Dipisah dari Catatan C.', false]].forEach(([k, t, n, wide]) => {
     const c = el('div', 'card' + (wide ? ' wide' : '')), data = catRowsOf(rpt, k);
     c.append(el('h3', '', t), el('p', 'muted', n), table(CAT_COLS, data, (r) => (r.tot ? 'tot' : ''), (r) => { if (r.pso) openPso(cab, r.pso); }).wrap); grid.appendChild(c);
   });
@@ -1302,7 +1302,7 @@ function reportOf(cab) {
       { key: 'clear', name: 'Clear', blocks: [{ t: 'Clear', cols: SEC_COLS, rows: rpt.sec.clear }], freeze: true },
       { key: 'tanpa', name: 'Tanpa panjar', blocks: [{ t: 'Tanpa panjar', cols: SEC_COLS, rows: rpt.sec.tanpa }], freeze: true },
       { key: 'jalan', name: 'Masih berjalan', blocks: [{ t: 'Masih berjalan', cols: SEC_COLS, rows: rpt.sec.jalan }], freeze: true },
-      { key: 'catatan', name: 'Catatan', blocks: [{ t: 'A. Pembatalan', cols: CAT_COLS, rows: cat('A') }, { t: 'B. Panjar masih berjalan', cols: CAT_COLS, rows: cat('B') }, { t: 'C. Kekurangan panjar dan sudah lunas tanpa panjar', cols: CAT_COLS, rows: cat('C') }, { t: 'D. Lebih bayar', cols: CAT_COLS, rows: cat('D') }] },
+      { key: 'catatan', name: 'Catatan', blocks: [{ t: 'A. Pembatalan', cols: CAT_COLS, rows: cat('A') }, { t: 'B. Panjar masih berjalan', cols: CAT_COLS, rows: cat('B') }, { t: 'C. Kekurangan panjar dan sudah lunas tanpa panjar', cols: CAT_COLS, rows: cat('C') }, { t: 'D. Lebih/Kurang Bayar', cols: CAT_COLS, rows: cat('D') }] },
     ],
     hasRows: db.length,
     bigRows: rpt.rows.length + db.length,
