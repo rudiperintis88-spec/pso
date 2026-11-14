@@ -1166,7 +1166,7 @@ function catDData(cabName, k) {
 }
 // urutan No PSO dari terkecil: nomor urut dulu (001, 002, ...), lalu tahun, bulan; tanpa No PSO paling bawah
 function psoCmp(a, b) {
-  const k = (x) => { const m = /^(\d+)\/PSO\/[A-Za-z0-9]+\/(\d+)\/(\d+)/i.exec(x || ''); return m ? [+m[1], +m[3], +m[2]] : null; };
+  const k = (x) => { const m = /^(\d+)\/PSO\/[A-Za-z0-9]+\/(\d+)\/(\d+)/i.exec(x || ''); return m ? [(+m[3] < 100 ? 2000 + +m[3] : +m[3]), +m[2], +m[1]] : null; };
   const p = k(a.pso), q = k(b.pso);
   if (!p || !q) return p ? -1 : q ? 1 : 0;
   return p[0] - q[0] || p[1] - q[1] || p[2] - q[2] || String(a.pso).localeCompare(String(b.pso));
