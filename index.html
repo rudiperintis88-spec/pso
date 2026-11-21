@@ -590,7 +590,7 @@ async function gviz(n) {
   catch (e) { if (e && /butuh login/.test(e.message || '')) throw e; return await gviz1(n); } // coba sekali lagi bila gangguan jaringan sesaat
 }
 // a branch sheet has "Per : ..." in A1 and/or a NomorPSO header in its first rows; this also stops a wrong sheet from being read when a name does not exist
-const looksBranch = (tb) => tb.slice(0, 4).some((r) => (r || []).some((x) => x != null && /nomorpso|^\s*per\s*:/i.test(String(x))));
+const looksBranch = (tb) => tb.slice(0, 4).some((r) => (r || []).some((x) => x != null && /^\s*(nomor\s*pso|no\s*pso)\s*$/i.test(String(x))));
 // ---------- Catatan D: penjelasan angka dibaca dari sheet Data (kolom Cabang, No PSO, Penjelasan, Nominal); baris dengan Penjelasan sama dijumlahkan, Catatan B ikut sebagai baris pertama
 const CATD_HDR = { cabang: ['cabang', 'divisi'], uraian: ['uraian', 'penjelasan', 'judulpenjelasan', 'kelompok', 'judul'], jumlah: ['jumlah', 'nominal', 'amount', 'rp'], pso: ['nomorpso', 'nopso', 'pso'], sumber: ['sumber', 'sumberdata', 'asal'], ket: ['keterangan', 'ket'], cat: ['catatan', 'jenis', 'untuk'] };
 // sheet Data boleh berisi dua blok penjelasan: "Penjelasan" (Catatan D) dan "Penjelasan Lebih Setoran" (Catatan E). Kolom Cabang / No PSO / Nominal dipilih yang paling dekat dengan kolom penjelasannya (yang berakhiran "Lebih Setoran" didahulukan untuk E).
