@@ -194,6 +194,7 @@ function cell(r,key,cls){
   let v=r[key];
   if(key==='age'){ if(v==null) return `<td class="num"><span class="dash">-</span></td>`; return `<td class="num"><span class="badge ${bucketOf(v).c}">${fmtN(v)}</span></td>`; }
   if(key==='ket') v=r.ket;
+  if(key==='no') v=r._n;
   if(v===''||v==null) return `<td class="${cls||''}"><span class="dash">-</span></td>`;
   return `<td class="${cls||''}">${esc(v)}</td>`;
 }
@@ -204,17 +205,17 @@ function renderTable(rows){
   if(!rows.length) body=`<tr><td colspan="${cfg.cols.length}" class="empty">Tidak ada data yang sesuai filter</td></tr>`;
   else if(st.group){
     const g=new Map(); rows.forEach(r=>{(g.get(r.biro)||g.set(r.biro,[]).get(r.biro)).push(r);});
-    for(const b of [...g.keys()].sort()){ const rs=sortedRows(g.get(b));
+    for(const b of [...g.keys()].sort()){ const rs=sortedRows(g.get(b)); rs.forEach((r,i)=>r._n=i+1);
       body+=`<tr class="grp"><td colspan="${cfg.cols.length}">Biro Jasa ${esc(b)} : ${fmtN(rs.length)} unit</td></tr>`+rs.map(r=>'<tr>'+cfg.cols.map(([k,,c])=>cell(r,k,c)).join('')+'</tr>').join('');
     }
-  } else body=sortedRows(rows).map(r=>'<tr>'+cfg.cols.map(([k,,c])=>cell(r,k,c)).join('')+'</tr>').join('');
+  } else { const srt=sortedRows(rows); srt.forEach((r,i)=>r._n=i+1); body=srt.map(r=>'<tr>'+cfg.cols.map(([k,,c])=>cell(r,k,c)).join('')+'</tr>').join(''); }
   $('tbl').innerHTML=head+'<tbody>'+body+'</tbody>';
   $('cnt').textContent = `Menampilkan ${fmtN(rows.length)} dari ${fmtN(DATA[state.tab].rows.length)} unit`;
 }
 function exportRows(){
   const cfg=TABS[state.tab], st=state[state.tab]; let rows=filtered();
-  if(st.group){ const g=new Map(); rows.forEach(r=>{(g.get(r.biro)||g.set(r.biro,[]).get(r.biro)).push(r);}); rows=[...g.keys()].sort().flatMap(b=>sortedRows(g.get(b))); } else rows=sortedRows(rows);
-  const heads=cfg.cols.map(c=>c[1]); const data=rows.map(r=>cfg.cols.map(([k])=>{ const v=r[k]; return (v===null||v===undefined)?'':(k==='age'||k==='no')&&v!==''?+v:v; }));
+  if(st.group){ const g=new Map(); rows.forEach(r=>{(g.get(r.biro)||g.set(r.biro,[]).get(r.biro)).push(r);}); rows=[...g.keys()].sort().flatMap(b=>{const rs=sortedRows(g.get(b)); rs.forEach((r,i)=>r._n=i+1); return rs;}); } else { rows=sortedRows(rows); rows.forEach((r,i)=>r._n=i+1); }
+  const heads=cfg.cols.map(c=>c[1]); const data=rows.map(r=>cfg.cols.map(([k])=>{ const v=k==='no'?r._n:r[k]; return (v===null||v===undefined)?'':(k==='age'||k==='no')&&v!==''?+v:v; }));
   return {heads,data};
 }
 function downloadBlob(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500); }
